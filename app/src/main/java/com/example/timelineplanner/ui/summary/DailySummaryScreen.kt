@@ -1,8 +1,11 @@
 package com.example.timelineplanner.ui.summary
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,19 +36,29 @@ import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
 import com.example.timelineplanner.ui.timeline.parseColor
 import com.example.timelineplanner.util.formatDateLabel
 import com.example.timelineplanner.util.ONE_DAY_MILLIS
@@ -211,16 +224,64 @@ private fun DonutChart(
     modifier: Modifier = Modifier
 ) {
     val trackColor = MaterialTheme.colorScheme.surfaceVariant
+    var selectedIndex by remember(items) { mutableIntStateOf(-1) }
+    val animProgress = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
 
-    Box(modifier = modifier.size(220.dp), contentAlignment = Alignment.Center) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val strokeWidth = 36.dp.toPx()
-            val radius = (size.minDimension - strokeWidth) / 2
-            val topLeft = Offset(
-                (size.width - radius * 2) / 2,
-                (size.height - radius * 2) / 2
-            )
-            val arcSize = Size(radius * 2, radius * 2)
+    val durationText = remember(items, selectedIndex) {
+        if (selectedIndex in items.indices) {
+            val item = items[selectedIndex]
+            val h = item.durationMinutes / 60
+            val m = item.durationMinutes % 60
+            if (h > 0) "${h}时${m}分" else "${m}分"
+        } else ""
+    }
+
+    Box(modifier = modifier.size(300.dp), contentAlignment = Alignment.Center) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(items) {
+                    detectTapGestures { offset ->
+                        val cx = size.width / 2f
+                        val cy = size.height / 2f
+                        val dx = offset.x - cx
+                        val dy = offset.y - cy
+                        val dist = kotlin.math.sqrt(dx * dx + dy * dy)
+                        val strokeWidthPx = 36.dp.toPx()
+                        val dim = minOf(size.width, size.height).toFloat()
+                        val outerR = (dim - strokeWidthPx) / 2
+                        val innerR = outerR - strokeWidthPx
+
+                        if (dist < innerR || dist > outerR + strokeWidthPx / 2) return@detectTapGestures
+
+                        val angle = (Math.toDegrees(atan2(dy, dx).toDouble()).toFloat() + 90f + 360f) % 360f
+
+                        var acc = 0f
+                        var found = -1
+                        for (i in items.indices) {
+                            val sweep = items[i].durationMinutes.toFloat() / totalMinutes * 360f
+                            if (angle >= acc && angle < acc + sweep) {
+                                found = i
+                                break
+                            }
+                            acc += sweep
+                        }
+
+                        if (found == selectedIndex) {
+                            selectedIndex = -1
+                            scope.launch { animProgress.animateTo(0f, spring()) }
+                        } else {
+                            selectedIndex = found
+                            scope.launch { animProgress.animateTo(1f, spring()) }
+                        }
+                    }
+                }
+        ) {
+            val baseStroke = 36.dp.toPx()
+            val selectedStroke = 42.dp.toPx()
+            val radius = (size.minDimension - baseStroke) / 2
+            val center = Offset(size.width / 2f, size.height / 2f)
 
             // 背景环
             drawArc(
@@ -228,25 +289,108 @@ private fun DonutChart(
                 startAngle = -90f,
                 sweepAngle = 360f,
                 useCenter = false,
-                topLeft = topLeft,
-                size = arcSize,
-                style = Stroke(width = strokeWidth, cap = StrokeCap.Butt)
+                topLeft = Offset(center.x - radius, center.y - radius),
+                size = Size(radius * 2, radius * 2),
+                style = Stroke(width = baseStroke, cap = StrokeCap.Butt)
             )
 
             // 各任务弧段
             var startAngle = -90f
-            for (item in items) {
+            val segmentData = mutableListOf<Triple<Float, Float, TaskSummaryItem>>()
+
+            for ((index, item) in items.withIndex()) {
                 val sweep = item.durationMinutes.toFloat() / totalMinutes * 360f
+                val isSelected = index == selectedIndex
+                val currentStroke = if (isSelected) {
+                    baseStroke + (selectedStroke - baseStroke) * animProgress.value
+                } else {
+                    baseStroke
+                }
+
                 drawArc(
                     color = parseColor(item.color),
                     startAngle = startAngle,
                     sweepAngle = sweep,
                     useCenter = false,
-                    topLeft = topLeft,
-                    size = arcSize,
-                    style = Stroke(width = strokeWidth, cap = StrokeCap.Butt)
+                    topLeft = Offset(center.x - radius, center.y - radius),
+                    size = Size(radius * 2, radius * 2),
+                    style = Stroke(width = currentStroke, cap = StrokeCap.Butt)
                 )
+
+                segmentData.add(Triple(startAngle, sweep, item))
                 startAngle += sweep
+            }
+
+            // 选中时画标注
+            if (selectedIndex in items.indices && animProgress.value > 0.1f) {
+                val item = items[selectedIndex]
+                val segStart = segmentData[selectedIndex].first
+                val segSweep = segmentData[selectedIndex].second
+                val midAngleDeg = segStart + segSweep / 2f
+                val midAngleRad = Math.toRadians(midAngleDeg.toDouble())
+
+                val outerEdge = radius + selectedStroke / 2
+
+                // 线起点：圆环外边缘
+                val startX = center.x + cos(midAngleRad).toFloat() * outerEdge
+                val startY = center.y + sin(midAngleRad).toFloat() * outerEdge
+
+                // 折线：先径向延伸，再水平延伸到右侧固定位置
+                val extendLen = 24.dp.toPx()
+                val elbowX = center.x + cos(midAngleRad).toFloat() * (outerEdge + extendLen)
+                val elbowY = center.y + sin(midAngleRad).toFloat() * (outerEdge + extendLen)
+
+                // 终点固定在右侧
+                val labelX = size.width - 4.dp.toPx()
+                val endY = elbowY.coerceIn(20.dp.toPx(), size.height - 20.dp.toPx())
+
+                val lineColor = parseColor(item.color)
+                val lineWidth = 1.5f.dp.toPx()
+
+                // 径向线段
+                drawLine(lineColor, Offset(startX, startY), Offset(elbowX, elbowY), lineWidth)
+                // 水平线段
+                drawLine(lineColor, Offset(elbowX, elbowY), Offset(labelX, endY), lineWidth)
+                // 起点小圆点
+                drawCircle(lineColor, 3.dp.toPx(), Offset(startX, startY))
+
+                // 文字标签背景 + 文字
+                val label = "${item.title}  $durationText"
+                val textSizePx = 11.dp.toPx()
+                val textPaint = android.graphics.Paint().apply {
+                    color = android.graphics.Color.WHITE
+                    textSize = textSizePx
+                    isAntiAlias = true
+                    typeface = android.graphics.Typeface.DEFAULT_BOLD
+                }
+                val textWidth = textPaint.measureText(label)
+                val bgPadH = 8.dp.toPx()
+                val bgPadV = 4.dp.toPx()
+                val bgW = textWidth + bgPadH * 2
+                val bgH = textSizePx + bgPadV * 2
+
+                val bgRight = labelX
+                val bgLeft = bgRight - bgW
+                val bgTop = endY - bgH / 2
+                val bgBottom = bgTop + bgH
+
+                val bgRect = android.graphics.RectF(bgLeft, bgTop, bgRight, bgBottom)
+                val bgPaint = android.graphics.Paint().apply {
+                    color = parseColor(item.color).copy(alpha = 0.9f).toArgb()
+                    isAntiAlias = true
+                }
+                drawContext.canvas.nativeCanvas.drawRoundRect(
+                    bgRect, 6.dp.toPx(), 6.dp.toPx(), bgPaint
+                )
+
+                // 文字
+                textPaint.textAlign = android.graphics.Paint.Align.LEFT
+                drawContext.canvas.nativeCanvas.drawText(
+                    label,
+                    bgLeft + bgPadH,
+                    endY + textSizePx / 3f,
+                    textPaint
+                )
             }
         }
 
