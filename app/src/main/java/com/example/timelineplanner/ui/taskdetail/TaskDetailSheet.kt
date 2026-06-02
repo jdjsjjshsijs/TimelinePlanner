@@ -1,5 +1,8 @@
 package com.example.timelineplanner.ui.taskdetail
 
+import android.content.Intent
+import android.provider.Settings
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -8,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -36,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -45,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.timelineplanner.ui.timeline.parseColor
 
@@ -70,6 +76,39 @@ fun TaskDetailSheet(
     val endConfirmVisible by viewModel.endConfirmVisible.collectAsState()
 
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showPinSettingsDialog by remember { mutableStateOf(false) }
+    val activity = LocalContext.current as? com.example.timelineplanner.MainActivity
+
+    val isKioskActive = timerState == TimerState.RUNNING || timerState == TimerState.PAUSED
+
+    // 专注模式：计时器启动时锁定应用，结束时解锁
+    LaunchedEffect(timerState) {
+        if (timerState == TimerState.RUNNING) {
+            try {
+                activity?.enterKioskMode()
+            } catch (_: Exception) {
+                showPinSettingsDialog = true
+            }
+        } else if (timerState == TimerState.ENDED || timerState == TimerState.IDLE) {
+            activity?.exitKioskMode()
+        }
+    }
+
+    // 退出时确保解锁
+    DisposableEffect(Unit) {
+        onDispose {
+            activity?.exitKioskMode()
+        }
+    }
+
+    // 拦截返回键
+    BackHandler {
+        if (isKioskActive) {
+            // kiosk 模式下什么都不做
+        } else {
+            onDismiss()
+        }
+    }
 
     LaunchedEffect(taskId) {
         if (taskId != null && taskId > 0) {
@@ -83,13 +122,8 @@ fun TaskDetailSheet(
         viewModel.dismissEvent.collect { onDismiss() }
     }
 
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
-    ) {
+    // 共享的内容 composable
+    val content: @Composable () -> Unit = {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -260,6 +294,27 @@ fun TaskDetailSheet(
         }
     }
 
+    // kiosk 模式：全屏不可关闭的布局
+    if (isKioskActive) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.surface)
+        ) {
+            content()
+        }
+    } else {
+        // 正常模式：底部弹窗
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = onDismiss,
+            sheetState = sheetState,
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+        ) {
+            content()
+        }
+    }
+
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
@@ -296,6 +351,27 @@ fun TaskDetailSheet(
             },
             dismissButton = {
                 TextButton(onClick = { viewModel.onEndTimerCancelled() }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+
+    if (showPinSettingsDialog) {
+        AlertDialog(
+            onDismissRequest = { showPinSettingsDialog = false },
+            title = { Text("开启屏幕固定") },
+            text = { Text("专注模式需要开启「屏幕固定」功能。\n\n请在设置中搜索「屏幕固定」或「屏幕锁定」，开启后即可在计时期间锁定应用。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showPinSettingsDialog = false
+                    try {
+                        activity?.startActivity(Intent(Settings.ACTION_SETTINGS))
+                    } catch (_: Exception) {}
+                }) { Text("去设置") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPinSettingsDialog = false }) {
                     Text("取消")
                 }
             }
