@@ -32,6 +32,7 @@ class TimelineViewModel @Inject constructor(
     val selectedTaskIds: StateFlow<Set<Long>> = _selectedTaskIds.asStateFlow()
 
     val isSelectionMode: Boolean get() = _selectedTaskIds.value.isNotEmpty()
+    val isSyncing: StateFlow<Boolean> = syncRepository.isSyncing
 
     private var loadJob: Job? = null
 
@@ -43,8 +44,9 @@ class TimelineViewModel @Inject constructor(
     private fun restoreFromServer() {
         viewModelScope.launch {
             val serverTasks = syncRepository.fetchAllTasks() ?: return@launch
+            if (serverTasks.isEmpty()) return@launch
             val localTasks = taskRepository.getTasksByDateOnce(_selectedDate.value)
-            if (localTasks.isEmpty() && serverTasks.isNotEmpty()) {
+            if (localTasks.isEmpty()) {
                 serverTasks.filter { it.dateMillis == _selectedDate.value }.forEach { task ->
                     taskRepository.insertTask(task)
                 }

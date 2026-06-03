@@ -1,9 +1,9 @@
 package com.example.timelineplanner.ui.timeline
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
@@ -23,17 +23,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.timelineplanner.model.Task
-import kotlinx.coroutines.withTimeoutOrNull
-import kotlin.math.abs
 import kotlin.math.roundToInt
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun BoxScope.TaskBar(
     task: Task,
@@ -73,41 +70,10 @@ fun BoxScope.TaskBar(
             .padding(horizontal = 2.dp)
             .shadow(2.dp, RoundedCornerShape(cornerRadius))
             .clip(RoundedCornerShape(cornerRadius))
-            .pointerInput(Unit) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    down.consume()
-                    val startX = down.position.x
-                    val startY = down.position.y
-                    var moved = false
-                    val completed = withTimeoutOrNull(500L) {
-                        while (true) {
-                            val event = awaitPointerEvent(pass = PointerEventPass.Main)
-                            val pressed = event.changes.filter { it.pressed }
-                            if (pressed.isEmpty()) break
-                            if (abs(pressed[0].position.x - startX) > 10f ||
-                                abs(pressed[0].position.y - startY) > 10f
-                            ) {
-                                moved = true
-                                break
-                            }
-                        }
-                    }
-                    if (completed == null) {
-                        // 超时 = 长按
-                        onLongClick()
-                        // 等松手
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            if (event.changes.none { it.pressed }) break
-                        }
-                    } else if (!moved) {
-                        // 没超时、没移动 = 点击
-                        onClick()
-                    }
-                    // moved = 滚动，不处理
-                }
-            }
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
             .background(barColor)
             .then(
                 if (isSelected) Modifier.border(3.dp, Color.White, RoundedCornerShape(cornerRadius))

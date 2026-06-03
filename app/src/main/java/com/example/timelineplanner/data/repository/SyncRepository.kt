@@ -11,6 +11,9 @@ import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -23,8 +26,12 @@ class SyncRepository @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val gson = Gson()
 
+    private val _isSyncing = MutableStateFlow(false)
+    val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
+
     fun syncDate(dateMillis: Long) {
         scope.launch {
+            _isSyncing.value = true
             try {
                 val entities = taskDao.getTasksByDateOnce(dateMillis)
                 val tasks = entities.map { e ->
@@ -50,6 +57,8 @@ class SyncRepository @Inject constructor(
                 Log.d("Sync", "Synced ${tasks.size} tasks for date $dateMillis")
             } catch (e: Exception) {
                 Log.w("Sync", "Sync failed: ${e.message}")
+            } finally {
+                _isSyncing.value = false
             }
         }
     }

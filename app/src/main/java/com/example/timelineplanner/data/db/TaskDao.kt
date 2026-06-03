@@ -5,7 +5,9 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.RawQuery
 import androidx.room.Update
+import androidx.sqlite.db.SupportSQLiteQuery
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -22,6 +24,9 @@ interface TaskDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTask(task: TaskEntity): Long
+
+    @Query("INSERT OR REPLACE INTO tasks (id, title, dateMillis, startMinute, endMinute, color, notes, orderIndex, pauseSegments) VALUES (:id, :title, :dateMillis, :startMinute, :endMinute, :color, :notes, :orderIndex, :pauseSegments)")
+    suspend fun insertTaskWithId(id: Long, title: String, dateMillis: Long, startMinute: Int, endMinute: Int, color: String, notes: String, orderIndex: Int, pauseSegments: String): Long
 
     @Update
     suspend fun updateTask(task: TaskEntity)

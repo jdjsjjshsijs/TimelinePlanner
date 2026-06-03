@@ -37,6 +37,23 @@ class TaskRepository @Inject constructor(
         return id
     }
 
+    suspend fun restoreTask(task: Task) {
+        val segments = task.pauseSegments.map { listOf(it.first, it.second) }
+        val existing = taskDao.getTaskById(task.id)
+        if (existing != null) return
+        taskDao.insertTaskWithId(
+            id = task.id,
+            title = task.title,
+            dateMillis = task.dateMillis,
+            startMinute = task.startMinute,
+            endMinute = task.endMinute,
+            color = task.color,
+            notes = task.notes,
+            orderIndex = task.orderIndex,
+            pauseSegments = gson.toJson(segments)
+        )
+    }
+
     suspend fun updateTask(task: Task) {
         taskDao.updateTask(task.toEntity())
         syncRepository.syncDate(task.dateMillis)

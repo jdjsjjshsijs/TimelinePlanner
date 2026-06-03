@@ -21,6 +21,8 @@ import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
@@ -33,6 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -61,6 +64,7 @@ fun TimelineScreen(
     val tasks by viewModel.tasks.collectAsState()
     val selectedDate by viewModel.selectedDate.collectAsState()
     val selectedTaskIds by viewModel.selectedTaskIds.collectAsState()
+    val isSyncing by viewModel.isSyncing.collectAsState()
 
     val hourHeightDp = BASE_HOUR_HEIGHT_DP
     val visibleMinutes = MINUTES_IN_DAY - TIMELINE_START_HOUR * 60
@@ -152,6 +156,28 @@ fun TimelineScreen(
                     viewModel.selectDate(selectedDate + ONE_DAY_MILLIS)
                 }) {
                     Icon(Icons.Default.ChevronRight, contentDescription = "后一天")
+                }
+            }
+
+            AnimatedVisibility(visible = isSyncing) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(end = 16.dp, bottom = 4.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Icon(
+                        Icons.Default.CloudUpload,
+                        contentDescription = "同步中",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "同步中...",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
         }
