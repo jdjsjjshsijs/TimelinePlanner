@@ -1,7 +1,9 @@
 import sqlite3
 import json
+import csv
+import io
 from datetime import datetime
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 
 app = Flask(__name__)
@@ -135,6 +137,62 @@ def delete_task(task_id):
         conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
         conn.commit()
     return jsonify({"ok": True})
+
+
+def _get_all_tasks_flat():
+    """获取全部任务，返回扁平化的字典列表"""
+    with get_db() as conn:
+        rows = conn.execute("SELECT * FROM tasks ORDER BY date_millis, start_minute").fetchall()
+
+    result = []
+    for r in rows:
+        date_str = datetime.fromtimestamp(r["date_millis"] / 1000).strftime("%Y-%m-%d")
+        start_h, start_m = divmod(r["start_minute"], 60)
+        end_h, end_m = divmod(r["end_minute"], 60)
+        duration = r["end_minute"] - r["start_minute"]
+        segments = json.loads(r["pause_segments"]) if r["pause_segments"] else []
+        pause_total = sum(s[1] - s[0] for s in segments)
+        effective = duration - pause_total
+        result.append({
+            "日期": date_str,
+            "任务名": r["title"],
+            "开始时间": f"{start_h:02d}:{start_m:02d}",
+            "结束时间": f"{end_h:02d}:{end_m:02d}",
+            "时长(分钟)": effective,
+            "备注": r["notes"] or "",
+            "颜色": r["color"],
+        })
+    return result
+
+
+@app.route("/api/tasks/export/csv", methods=["GET"])
+def export_csv():
+    """导出全部任务为 CSV"""
+    tasks = _get_all_tasks_flat()
+    if not tasks:
+        return Response("暂无数据", status=204)
+
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=tasks[0].keys())
+    writer.writeheader()
+    writer.writerows(tasks)
+
+    return Response(
+        "﻿" + output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=tasks_export.csv"}
+    )
+
+
+@app.route("/api/tasks/export/json", methods=["GET"])
+def export_json():
+    """导出全部任务为格式化 JSON"""
+    tasks = _get_all_tasks_flat()
+    return Response(
+        json.dumps(tasks, ensure_ascii=False, indent=2),
+        mimetype="application/json",
+        headers={"Content-Disposition": "attachment; filename=tasks_export.json"}
+    )
 
 
 if __name__ == "__main__":

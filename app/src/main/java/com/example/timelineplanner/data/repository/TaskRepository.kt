@@ -26,6 +26,10 @@ class TaskRepository @Inject constructor(
         return taskDao.getTasksByDateOnce(dateMillis).map { it.toDomainModel() }
     }
 
+    suspend fun getTasksByDateRange(startMillis: Long, endMillis: Long): List<Task> {
+        return taskDao.getTasksByDateRange(startMillis, endMillis).map { it.toDomainModel() }
+    }
+
     suspend fun getTaskById(id: Long): Task? {
         return taskDao.getTaskById(id)?.toDomainModel()
     }

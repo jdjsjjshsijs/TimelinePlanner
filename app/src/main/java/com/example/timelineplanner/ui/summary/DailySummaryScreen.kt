@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.ChevronLeft
@@ -75,12 +76,29 @@ fun DailySummaryScreen(
     val selectedDate by viewModel.selectedDate.collectAsState()
     val summaryItems by viewModel.summaryItems.collectAsState()
     val totalTaskMinutes by viewModel.totalTaskMinutes.collectAsState()
+    val period by viewModel.period.collectAsState()
 
     var showDatePicker by remember { mutableStateOf(false) }
 
     val todayStart = remember { todayStartMillis() }
     val isToday = selectedDate == todayStart
-    val dateLabel = remember(selectedDate) { formatDateLabel(selectedDate) }
+    val dateLabel = remember(selectedDate, period) {
+        when (period) {
+            SummaryPeriod.DAY -> formatDateLabel(selectedDate)
+            SummaryPeriod.WEEK -> {
+                val cal = java.util.Calendar.getInstance().apply { timeInMillis = selectedDate }
+                cal.set(java.util.Calendar.DAY_OF_WEEK, cal.firstDayOfWeek)
+                val weekStart = formatDateLabel(cal.timeInMillis)
+                cal.add(java.util.Calendar.DAY_OF_WEEK, 6)
+                val weekEnd = formatDateLabel(cal.timeInMillis)
+                "$weekStart ~ $weekEnd"
+            }
+            SummaryPeriod.MONTH -> {
+                val cal = java.util.Calendar.getInstance().apply { timeInMillis = selectedDate }
+                "${cal.get(java.util.Calendar.YEAR)}年${cal.get(java.util.Calendar.MONTH) + 1}月"
+            }
+        }
+    }
 
     Column(
         modifier = modifier
@@ -96,9 +114,18 @@ fun DailySummaryScreen(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             IconButton(onClick = {
-                viewModel.selectDate(selectedDate - ONE_DAY_MILLIS)
+                val delta = when (period) {
+                    SummaryPeriod.DAY -> ONE_DAY_MILLIS
+                    SummaryPeriod.WEEK -> 7 * ONE_DAY_MILLIS
+                    SummaryPeriod.MONTH -> {
+                        val cal = java.util.Calendar.getInstance().apply { timeInMillis = selectedDate }
+                        cal.add(java.util.Calendar.MONTH, -1)
+                        cal.timeInMillis - selectedDate
+                    }
+                }
+                viewModel.selectDate(selectedDate - delta)
             }) {
-                Icon(Icons.Default.ChevronLeft, contentDescription = "前一天")
+                Icon(Icons.Default.ChevronLeft, contentDescription = "前一${period.label}")
             }
 
             Row(
@@ -129,9 +156,50 @@ fun DailySummaryScreen(
             }
 
             IconButton(onClick = {
-                viewModel.selectDate(selectedDate + ONE_DAY_MILLIS)
+                val delta = when (period) {
+                    SummaryPeriod.DAY -> ONE_DAY_MILLIS
+                    SummaryPeriod.WEEK -> 7 * ONE_DAY_MILLIS
+                    SummaryPeriod.MONTH -> {
+                        val cal = java.util.Calendar.getInstance().apply { timeInMillis = selectedDate }
+                        cal.add(java.util.Calendar.MONTH, 1)
+                        cal.timeInMillis - selectedDate
+                    }
+                }
+                viewModel.selectDate(selectedDate + delta)
             }) {
-                Icon(Icons.Default.ChevronRight, contentDescription = "后一天")
+                Icon(Icons.Default.ChevronRight, contentDescription = "后一${period.label}")
+            }
+        }
+
+        // 周期切换
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.Center
+        ) {
+            SummaryPeriod.entries.forEach { p ->
+                val selected = period == p
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 4.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(
+                            if (selected) MaterialTheme.colorScheme.primaryContainer
+                            else Color.Transparent
+                        )
+                        .clickable { viewModel.selectPeriod(p) }
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = p.label,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                        color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
 
@@ -167,11 +235,27 @@ fun DailySummaryScreen(
                 item {
                     val hours = totalTaskMinutes / 60
                     val mins = totalTaskMinutes % 60
-                    val freeMinutes = 24 * 60 - totalTaskMinutes
-                    val freeHours = freeMinutes / 60
-                    val freeMins = freeMinutes % 60
+                    val summaryText = if (period == SummaryPeriod.DAY) {
+                        val freeMinutes = 24 * 60 - totalTaskMinutes
+                        val freeHours = freeMinutes / 60
+                        val freeMins = freeMinutes % 60
+                        "已安排 ${hours}时${mins}分  |  空闲 ${freeHours}时${freeMins}分"
+                    } else {
+                        val days = when (period) {
+                            SummaryPeriod.WEEK -> 7
+                            SummaryPeriod.MONTH -> {
+                                val cal = java.util.Calendar.getInstance().apply { timeInMillis = selectedDate }
+                                cal.getActualMaximum(java.util.Calendar.DAY_OF_MONTH)
+                            }
+                            else -> 1
+                        }
+                        val avgPerDay = if (days > 0) totalTaskMinutes / days else 0
+                        val avgH = avgPerDay / 60
+                        val avgM = avgPerDay % 60
+                        "共 ${hours}时${mins}分  |  日均 ${avgH}时${avgM}分"
+                    }
                     Text(
-                        text = "已安排 ${hours}时${mins}分  |  空闲 ${freeHours}时${freeMins}分",
+                        text = summaryText,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 16.dp)
@@ -421,6 +505,8 @@ private fun TaskSummaryRow(item: TaskSummaryItem) {
         String.format("%02d:%02d-%02d:%02d", s / 60, s % 60, e / 60, e % 60)
     }
 
+    var showTimeRange by remember { mutableStateOf(false) }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -432,6 +518,7 @@ private fun TaskSummaryRow(item: TaskSummaryItem) {
                 .size(12.dp)
                 .clip(CircleShape)
                 .background(parseColor(item.color))
+                .clickable { showTimeRange = !showTimeRange }
         )
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
@@ -440,11 +527,13 @@ private fun TaskSummaryRow(item: TaskSummaryItem) {
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium
             )
-            Text(
-                text = timeRangeText,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            if (showTimeRange) {
+                Text(
+                    text = timeRangeText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
         Column(horizontalAlignment = Alignment.End) {
             Text(
