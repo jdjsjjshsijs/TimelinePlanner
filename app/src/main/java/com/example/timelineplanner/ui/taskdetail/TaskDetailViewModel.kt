@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import com.example.timelineplanner.util.TimerStateStore
 import com.example.timelineplanner.util.todayStartMillis
 import java.util.Calendar
 import javax.inject.Inject
@@ -22,7 +23,8 @@ enum class TimerState { IDLE, RUNNING, PAUSED, ENDED }
 
 @HiltViewModel
 class TaskDetailViewModel @Inject constructor(
-    private val taskRepository: TaskRepository
+    private val taskRepository: TaskRepository,
+    private val timerStateStore: TimerStateStore
 ) : ViewModel() {
 
     private var currentDateMillis: Long = todayStartMillis()
@@ -82,6 +84,7 @@ class TaskDetailViewModel @Inject constructor(
     private var timerStartMillis: Long = 0L
     private var pausedElapsedMillis: Long = 0L
     private var pendingPauseStartMinute: Int = 0
+    private var isRestoringTimer = false
 
     private fun getCurrentMinute(): Int {
         val now = Calendar.getInstance()
@@ -112,6 +115,18 @@ class TaskDetailViewModel @Inject constructor(
         _timerState.value = TimerState.PAUSED
         timerJob?.cancel()
         updateElapsedDisplay()
+        savePausedStateToStore()
+    }
+
+    private fun savePausedStateToStore() {
+        val taskId = _editingTaskId.value ?: return
+        timerStateStore.savePausedState(
+            taskId = taskId,
+            elapsedMillis = pausedElapsedMillis,
+            pauseSegments = _pauseSegments.value,
+            pauseStartMinute = pendingPauseStartMinute,
+            startMinute = _startHour.value * 60 + _startMinute.value
+        )
     }
 
     fun resumeTimer() {
@@ -120,6 +135,7 @@ class TaskDetailViewModel @Inject constructor(
         _pauseSegments.value = _pauseSegments.value + segment
         _timerState.value = TimerState.RUNNING
         timerStartMillis = System.currentTimeMillis()
+        timerStateStore.clear()
         timerJob?.cancel()
         timerJob = viewModelScope.launch {
             while (true) {
@@ -150,7 +166,6 @@ class TaskDetailViewModel @Inject constructor(
     fun onEndTimerConfirmed() {
         val nowMinute = getCurrentMinute()
         val startMinTotal = _startHour.value * 60 + _startMinute.value
-        // 结束时间至少比开始时间多1分钟，保证任务在时间轴上可见
         val endMinTotal = if (nowMinute <= startMinTotal) startMinTotal + 1 else nowMinute
         _endHour.value = endMinTotal / 60
         _endMinute.value = endMinTotal % 60
@@ -158,10 +173,25 @@ class TaskDetailViewModel @Inject constructor(
         timerJob?.cancel()
         timerJob = null
         _endConfirmVisible.value = false
+        timerStateStore.clear()
     }
 
     fun onEndTimerCancelled() {
         _endConfirmVisible.value = false
+    }
+
+    fun finalizePausedTimerAndSave() {
+        if (_timerState.value != TimerState.PAUSED) return
+        val nowMinute = getCurrentMinute()
+        val segment = pendingPauseStartMinute to nowMinute
+        _pauseSegments.value = _pauseSegments.value + segment
+        val startMinTotal = _startHour.value * 60 + _startMinute.value
+        val endMinTotal = if (nowMinute <= startMinTotal) startMinTotal + 1 else nowMinute
+        _endHour.value = endMinTotal / 60
+        _endMinute.value = endMinTotal % 60
+        _timerState.value = TimerState.ENDED
+        timerJob?.cancel()
+        saveTimerResult()
     }
 
     fun saveTimerResult() {
@@ -172,11 +202,16 @@ class TaskDetailViewModel @Inject constructor(
 
         viewModelScope.launch {
             taskRepository.updateTaskTimer(taskId, startMin, endMin, segments)
+            timerStateStore.clear()
             _dismissEvent.emit(Unit)
         }
     }
 
     fun loadTask(taskId: Long) {
+        if (isRestoringTimer) {
+            isRestoringTimer = false
+            return
+        }
         _timerState.value = TimerState.IDLE
         _elapsedDisplay.value = "00:00"
         _pauseSegments.value = emptyList()
@@ -199,6 +234,38 @@ class TaskDetailViewModel @Inject constructor(
                 }
                 _selectedColorIndex.value = colorIdx
                 _pauseSegments.value = task.pauseSegments
+            }
+        }
+    }
+
+    fun hasPausedTimer(): Boolean = timerStateStore.hasPausedState()
+
+    fun getPausedTaskId(): Long = timerStateStore.getTaskId()
+
+    fun restorePausedTimer() {
+        val restored = timerStateStore.restore() ?: return
+        isRestoringTimer = true
+        viewModelScope.launch {
+            taskRepository.getTaskById(restored.taskId)?.let { task ->
+                _editingTaskId.value = task.id
+                _title.value = task.title
+                _startHour.value = restored.startMinute / 60
+                _startMinute.value = restored.startMinute % 60
+                _endHour.value = task.endMinute / 60
+                _endMinute.value = task.endMinute % 60
+                _notes.value = task.notes
+                val colorIdx = availableColors.indexOf(task.color).let {
+                    if (it >= 0) it else 0
+                }
+                _selectedColorIndex.value = colorIdx
+                _pauseSegments.value = restored.pauseSegments
+                pausedElapsedMillis = restored.elapsedMillis
+                pendingPauseStartMinute = java.util.Calendar.getInstance().let {
+                    it.get(java.util.Calendar.HOUR_OF_DAY) * 60 + it.get(java.util.Calendar.MINUTE)
+                }
+                _timerState.value = TimerState.PAUSED
+                updateElapsedDisplay()
+                savePausedStateToStore()
             }
         }
     }

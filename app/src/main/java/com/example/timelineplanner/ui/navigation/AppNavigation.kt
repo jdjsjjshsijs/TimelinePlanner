@@ -60,6 +60,15 @@ fun AppNavigation(
     var showTaskSheet by remember { mutableStateOf(false) }
     val selectedDate by timelineViewModel.selectedDate.collectAsState()
 
+    // 启动时检查是否有暂停中的计时器，自动恢复
+    LaunchedEffect(Unit) {
+        if (taskDetailViewModel.hasPausedTimer()) {
+            taskDetailViewModel.restorePausedTimer()
+            editingTaskId = taskDetailViewModel.getPausedTaskId()
+            showTaskSheet = true
+        }
+    }
+
     LaunchedEffect(selectedDate) {
         aiChatViewModel.setCurrentDate(selectedDate)
         summaryViewModel.setDate(selectedDate)

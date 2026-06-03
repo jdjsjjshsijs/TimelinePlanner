@@ -21,12 +21,19 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.timelineplanner.ui.timeline.minuteToTimeString
+import kotlinx.coroutines.delay
+import java.util.Calendar
 
 @Composable
 fun TimerPanel(
@@ -58,6 +65,22 @@ fun TimerPanel(
                 MaterialTheme.colorScheme.onSurfaceVariant
             else
                 MaterialTheme.colorScheme.onSurface
+        )
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        var currentTime by remember { mutableStateOf(formatCurrentTime()) }
+        LaunchedEffect(Unit) {
+            while (true) {
+                currentTime = formatCurrentTime()
+                delay(1000)
+            }
+        }
+        Text(
+            text = currentTime,
+            style = MaterialTheme.typography.titleMedium,
+            fontFamily = FontFamily.Monospace,
+            color = MaterialTheme.colorScheme.primary
         )
 
         Spacer(modifier = Modifier.height(4.dp))
@@ -168,4 +191,12 @@ fun TimerPanel(
             }
         }
     }
+}
+
+private fun formatCurrentTime(): String {
+    val cal = Calendar.getInstance()
+    return String.format("%02d:%02d:%02d",
+        cal.get(Calendar.HOUR_OF_DAY),
+        cal.get(Calendar.MINUTE),
+        cal.get(Calendar.SECOND))
 }

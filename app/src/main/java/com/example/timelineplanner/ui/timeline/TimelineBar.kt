@@ -23,14 +23,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.timelineplanner.model.Task
-import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -75,13 +75,14 @@ fun BoxScope.TaskBar(
             .clip(RoundedCornerShape(cornerRadius))
             .pointerInput(Unit) {
                 awaitEachGesture {
-                    val down = awaitFirstDown()
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    down.consume()
                     val startX = down.position.x
                     val startY = down.position.y
                     var moved = false
                     val completed = withTimeoutOrNull(500L) {
                         while (true) {
-                            val event = awaitPointerEvent()
+                            val event = awaitPointerEvent(pass = PointerEventPass.Main)
                             val pressed = event.changes.filter { it.pressed }
                             if (pressed.isEmpty()) break
                             if (abs(pressed[0].position.x - startX) > 10f ||

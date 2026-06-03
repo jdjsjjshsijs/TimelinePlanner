@@ -79,7 +79,7 @@ fun TaskDetailSheet(
     var showPinSettingsDialog by remember { mutableStateOf(false) }
     val activity = LocalContext.current as? com.example.timelineplanner.MainActivity
 
-    val isKioskActive = timerState == TimerState.RUNNING || timerState == TimerState.PAUSED
+    val isKioskActive = timerState == TimerState.RUNNING
 
     // 专注模式：计时器启动时锁定应用，结束时解锁
     LaunchedEffect(timerState) {
@@ -89,7 +89,7 @@ fun TaskDetailSheet(
             } catch (_: Exception) {
                 showPinSettingsDialog = true
             }
-        } else if (timerState == TimerState.ENDED || timerState == TimerState.IDLE) {
+        } else if (timerState == TimerState.ENDED || timerState == TimerState.IDLE || timerState == TimerState.PAUSED) {
             activity?.exitKioskMode()
         }
     }
@@ -300,6 +300,7 @@ fun TaskDetailSheet(
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.surface)
+                .padding(top = 48.dp)
         ) {
             content()
         }
