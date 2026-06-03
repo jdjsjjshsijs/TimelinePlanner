@@ -2,6 +2,7 @@ package com.example.timelineplanner.ui.timeline
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.timelineplanner.data.repository.SyncRepository
 import com.example.timelineplanner.data.repository.TaskRepository
 import com.example.timelineplanner.model.Task
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -15,7 +16,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class TimelineViewModel @Inject constructor(
-    private val taskRepository: TaskRepository
+    private val taskRepository: TaskRepository,
+    private val syncRepository: SyncRepository
 ) : ViewModel() {
 
     private val todayStart: Long by lazy { todayStartMillis() }
@@ -34,7 +36,20 @@ class TimelineViewModel @Inject constructor(
     private var loadJob: Job? = null
 
     init {
+        restoreFromServer()
         loadTasks()
+    }
+
+    private fun restoreFromServer() {
+        viewModelScope.launch {
+            val serverTasks = syncRepository.fetchAllTasks() ?: return@launch
+            val localTasks = taskRepository.getTasksByDateOnce(_selectedDate.value)
+            if (localTasks.isEmpty() && serverTasks.isNotEmpty()) {
+                serverTasks.filter { it.dateMillis == _selectedDate.value }.forEach { task ->
+                    taskRepository.insertTask(task)
+                }
+            }
+        }
     }
 
     private fun loadTasks() {

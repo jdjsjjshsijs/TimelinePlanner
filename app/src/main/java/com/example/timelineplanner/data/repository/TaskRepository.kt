@@ -12,7 +12,8 @@ import javax.inject.Singleton
 
 @Singleton
 class TaskRepository @Inject constructor(
-    private val taskDao: TaskDao
+    private val taskDao: TaskDao,
+    private val syncRepository: SyncRepository
 ) {
     private val gson = Gson()
     fun getTasksByDate(dateMillis: Long): Flow<List<Task>> {
@@ -31,11 +32,14 @@ class TaskRepository @Inject constructor(
 
     suspend fun insertTask(task: Task): Long {
         val entity = task.toEntity()
-        return taskDao.insertTask(entity)
+        val id = taskDao.insertTask(entity)
+        syncRepository.syncDate(task.dateMillis)
+        return id
     }
 
     suspend fun updateTask(task: Task) {
         taskDao.updateTask(task.toEntity())
+        syncRepository.syncDate(task.dateMillis)
     }
 
     suspend fun deleteTask(task: Task) {
@@ -43,11 +47,15 @@ class TaskRepository @Inject constructor(
     }
 
     suspend fun deleteTaskById(id: Long) {
+        val task = taskDao.getTaskById(id)
         taskDao.deleteTaskById(id)
+        task?.let { syncRepository.syncDate(it.dateMillis) }
     }
 
     suspend fun deleteTasksByIds(ids: List<Long>) {
+        val dates = ids.mapNotNull { taskDao.getTaskById(it)?.dateMillis }.distinct()
         taskDao.deleteTasksByIds(ids)
+        dates.forEach { syncRepository.syncDate(it) }
     }
 
     suspend fun updateTaskTimer(
@@ -65,6 +73,7 @@ class TaskRepository @Inject constructor(
                 pauseSegments = gson.toJson(segments)
             )
         )
+        syncRepository.syncDate(existing.dateMillis)
     }
 
     private fun TaskEntity.toDomainModel(): Task {

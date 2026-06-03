@@ -8,6 +8,8 @@ import androidx.security.crypto.MasterKey
 import com.example.timelineplanner.data.db.AppDatabase
 import com.example.timelineplanner.data.db.ChatMessageDao
 import com.example.timelineplanner.data.db.TaskDao
+import com.example.timelineplanner.data.remote.SyncApi
+import com.example.timelineplanner.data.remote.SyncClient
 import com.example.timelineplanner.data.repository.AiTaskRepository
 import com.example.timelineplanner.data.repository.TaskRepository
 import dagger.Module
@@ -45,12 +47,6 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideTaskRepository(taskDao: TaskDao): TaskRepository {
-        return TaskRepository(taskDao)
-    }
-
-    @Provides
-    @Singleton
     fun provideAiSettingsPrefs(@ApplicationContext context: Context): SharedPreferences {
         val masterKey = MasterKey.Builder(context)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
@@ -83,6 +79,12 @@ object AppModule {
         }
 
         return encryptedPrefs
+    }
+
+    @Provides
+    @Singleton
+    fun provideSyncApi(): SyncApi {
+        return SyncClient.createApi()
     }
 
     @Provides
