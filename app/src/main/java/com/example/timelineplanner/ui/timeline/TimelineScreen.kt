@@ -37,6 +37,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -227,7 +228,7 @@ fun TimelineScreen(
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             title = { Text("确认删除") },
-            text = { Text("确定要删除选中的 ${selectedTaskIds.size} 个任务吗？此操作不可撤销。") },
+            text = { Text("确定要删除选中的 ${selectedTaskIds.size} 个任务吗？") },
             confirmButton = {
                 TextButton(
                     onClick = {

@@ -7,12 +7,21 @@ import com.example.timelineplanner.data.repository.TaskRepository
 import com.example.timelineplanner.model.Task
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import com.example.timelineplanner.util.todayStartMillis
 import javax.inject.Inject
+
+sealed class UndoAction {
+    data class Delete(val tasks: List<Task>) : UndoAction()
+    data class Create(val taskId: Long) : UndoAction()
+    data class Edit(val oldTask: Task) : UndoAction()
+}
 
 @HiltViewModel
 class TimelineViewModel @Inject constructor(
@@ -33,6 +42,11 @@ class TimelineViewModel @Inject constructor(
 
     val isSelectionMode: Boolean get() = _selectedTaskIds.value.isNotEmpty()
     val isSyncing: StateFlow<Boolean> = syncRepository.isSyncing
+
+    private val _canUndo = MutableStateFlow(false)
+    val canUndo: StateFlow<Boolean> = _canUndo.asStateFlow()
+
+    private val undoStack = mutableListOf<UndoAction>()
 
     private var loadJob: Job? = null
 
@@ -97,8 +111,42 @@ class TimelineViewModel @Inject constructor(
         val ids = _selectedTaskIds.value.toList()
         if (ids.isEmpty()) return
         viewModelScope.launch {
+            val deletedTasks = ids.mapNotNull { taskRepository.getTaskById(it) }
             taskRepository.deleteTasksByIds(ids)
             _selectedTaskIds.value = emptySet()
+            pushUndo(UndoAction.Delete(deletedTasks))
+        }
+    }
+
+    fun recordTaskCreated(taskId: Long) {
+        pushUndo(UndoAction.Create(taskId))
+    }
+
+    fun recordTaskEdited(oldTask: Task) {
+        pushUndo(UndoAction.Edit(oldTask))
+    }
+
+    private fun pushUndo(action: UndoAction) {
+        undoStack.add(action)
+        _canUndo.value = undoStack.isNotEmpty()
+    }
+
+    fun undo() {
+        if (undoStack.isEmpty()) return
+        val action = undoStack.removeAt(undoStack.lastIndex)
+        _canUndo.value = undoStack.isNotEmpty()
+        viewModelScope.launch {
+            when (action) {
+                is UndoAction.Delete -> {
+                    action.tasks.forEach { taskRepository.insertTask(it) }
+                }
+                is UndoAction.Create -> {
+                    taskRepository.deleteTaskById(action.taskId)
+                }
+                is UndoAction.Edit -> {
+                    taskRepository.updateTask(action.oldTask)
+                }
+            }
         }
     }
 }

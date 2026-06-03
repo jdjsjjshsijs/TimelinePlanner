@@ -67,6 +67,12 @@ class TaskDetailViewModel @Inject constructor(
     private val _errorEvent = MutableSharedFlow<String>()
     val errorEvent = _errorEvent.asSharedFlow()
 
+    private val _taskCreatedEvent = MutableSharedFlow<Long>()
+    val taskCreatedEvent = _taskCreatedEvent.asSharedFlow()
+
+    private val _taskEditedEvent = MutableSharedFlow<Task>()
+    val taskEditedEvent = _taskEditedEvent.asSharedFlow()
+
     // Timer state
     private val _timerState = MutableStateFlow(TimerState.IDLE)
     val timerState: StateFlow<TimerState> = _timerState.asStateFlow()
@@ -331,9 +337,12 @@ class TaskDetailViewModel @Inject constructor(
 
         viewModelScope.launch {
             if (existingId != null) {
+                val oldTask = taskRepository.getTaskById(existingId)
                 taskRepository.updateTask(task)
+                if (oldTask != null) _taskEditedEvent.emit(oldTask)
             } else {
-                taskRepository.insertTask(task)
+                val newId = taskRepository.insertTask(task)
+                _taskCreatedEvent.emit(newId)
             }
             _dismissEvent.emit(Unit)
         }

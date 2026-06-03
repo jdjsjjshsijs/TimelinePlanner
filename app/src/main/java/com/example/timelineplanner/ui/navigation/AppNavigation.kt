@@ -1,13 +1,20 @@
 package com.example.timelineplanner.ui.navigation
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Undo
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
-import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.outlined.Chat
 import androidx.compose.material.icons.filled.Analytics
@@ -59,6 +66,7 @@ fun AppNavigation(
     var editingTaskId by remember { mutableStateOf<Long?>(null) }
     var showTaskSheet by remember { mutableStateOf(false) }
     val selectedDate by timelineViewModel.selectedDate.collectAsState()
+    val canUndo by timelineViewModel.canUndo.collectAsState()
 
     // 启动时检查是否有暂停中的计时器，自动恢复
     LaunchedEffect(Unit) {
@@ -78,8 +86,19 @@ fun AppNavigation(
     LaunchedEffect(Unit) {
         aiChatViewModel.navigateToDateEvent.collect { date ->
             timelineViewModel.selectDate(date)
-            // 强制刷新确保删除等操作立即反映
             timelineViewModel.refreshTasks()
+        }
+    }
+
+    // 任务创建/编辑撤销事件
+    LaunchedEffect(Unit) {
+        taskDetailViewModel.taskCreatedEvent.collect { taskId ->
+            timelineViewModel.recordTaskCreated(taskId)
+        }
+    }
+    LaunchedEffect(Unit) {
+        taskDetailViewModel.taskEditedEvent.collect { oldTask ->
+            timelineViewModel.recordTaskEdited(oldTask)
         }
     }
 
@@ -132,19 +151,44 @@ fun AppNavigation(
                         showTaskSheet = true
                     }
                 )
-                FloatingActionButton(
-                    onClick = {
-                        editingTaskId = null
-                        taskDetailViewModel.setCurrentDate(selectedDate)
-                        showTaskSheet = true
-                    },
+                var fabMenuExpanded by remember { mutableStateOf(false) }
+                Box(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(16.dp),
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
+                        .padding(16.dp)
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = "新建日程")
+                    DropdownMenu(
+                        expanded = fabMenuExpanded,
+                        onDismissRequest = { fabMenuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("新建任务") },
+                            onClick = {
+                                fabMenuExpanded = false
+                                editingTaskId = null
+                                taskDetailViewModel.setCurrentDate(selectedDate)
+                                showTaskSheet = true
+                            },
+                            leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) }
+                        )
+                        if (canUndo) {
+                            DropdownMenuItem(
+                                text = { Text("撤销") },
+                                onClick = {
+                                    fabMenuExpanded = false
+                                    timelineViewModel.undo()
+                                },
+                                leadingIcon = { Icon(Icons.Default.Undo, contentDescription = null) }
+                            )
+                        }
+                    }
+                    FloatingActionButton(
+                        onClick = { fabMenuExpanded = true },
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = "菜单")
+                    }
                 }
             }
             1 -> DailySummaryScreen(
