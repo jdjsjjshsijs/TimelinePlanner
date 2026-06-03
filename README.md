@@ -19,8 +19,16 @@ Android 日程时间线规划应用，帮助用户以分钟级精度管理每日
 ### 计时器
 - 实时计时，支持暂停/继续/结束
 - 记录暂停时间段，自动计算有效时长
-- **专注模式**：计时器启动时锁定应用，隐藏导航栏和状态栏，防止分心
+- **专注模式**：计时器运行时锁定应用，隐藏导航栏和状态栏，防止分心
+- 暂停时可正常退出 app，计时状态自动保存，重新打开自动恢复
+- 计时面板显示当前时间（HH:MM:SS）
 - 计时结束后保存结果到任务
+
+### 云同步
+- 任务数据自动同步到远程服务器，防止数据丢失
+- 每次增删改操作后全量备份到服务器
+- 启动时自动从服务器恢复数据
+- Python Flask 后端，SQLite 存储
 
 ### 每日总结
 - 圆环图展示任务时间占比
@@ -67,6 +75,10 @@ app/src/main/java/com/example/timelineplanner/
 │   ├── theme/        # 主题、颜色、字体
 │   └── timeline/     # 时间线主页面
 └── util/             # 工具类（日期格式化等）
+
+server/
+├── app.py            # Flask 同步服务器
+└── requirements.txt  # Python 依赖
 ```
 
 ## 构建与运行
@@ -79,6 +91,16 @@ git clone https://github.com/jdjsjjshsijs/TimelinePlanner.git
 2. 用 Android Studio 打开项目
 
 3. 连接设备或启动模拟器，点击 Run
+
+### 云同步服务器（可选）
+
+```bash
+cd server
+pip install flask flask-cors
+python app.py
+```
+
+服务器默认监听 `0.0.0.0:5000`，需在 `SyncClient.kt` 中配置服务器 IP 地址。
 
 ## 权限说明
 
