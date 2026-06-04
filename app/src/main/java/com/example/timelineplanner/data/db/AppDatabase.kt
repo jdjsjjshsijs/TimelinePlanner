@@ -17,6 +17,25 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun practiceDao(): PracticeDao
 
     companion object {
+        // version 1 -> 2: initial tables already existed, ensure chat_messages table exists
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `chat_messages` (" +
+                    "`id` TEXT NOT NULL, `content` TEXT NOT NULL, `isUser` INTEGER NOT NULL, " +
+                    "`timestamp` INTEGER NOT NULL, PRIMARY KEY(`id`))"
+                )
+            }
+        }
+
+        // version 2 -> 3: ensure tasks table has orderIndex column
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                try { db.execSQL("ALTER TABLE `tasks` ADD COLUMN `orderIndex` INTEGER NOT NULL DEFAULT 0") }
+                catch (_: Exception) {}
+            }
+        }
+
         val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("""

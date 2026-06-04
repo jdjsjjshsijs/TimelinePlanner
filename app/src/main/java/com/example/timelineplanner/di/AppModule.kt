@@ -36,7 +36,7 @@ object AppModule {
             AppDatabase::class.java,
             "timeline_planner.db"
         )
-            .addMigrations(AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5)
+            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5)
             .build()
     }
 
@@ -66,8 +66,10 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideCourseRepository(courseDao: CourseDao): CourseRepository {
-        return CourseRepository(courseDao)
+    fun provideCourseRepository(courseDao: CourseDao, syncApi: SyncApi): CourseRepository {
+        val repo = CourseRepository(courseDao)
+        repo.setSyncApi(syncApi)
+        return repo
     }
 
     @Provides
@@ -120,9 +122,8 @@ object AppModule {
     }
 
     @Provides
-    @Singleton
-    fun provideSyncApi(): SyncApi {
-        return SyncClient.createApi()
+    fun provideSyncApi(aiSettingsPrefs: SharedPreferences): SyncApi {
+        return SyncClient.createApi(aiSettingsPrefs)
     }
 
     @Provides

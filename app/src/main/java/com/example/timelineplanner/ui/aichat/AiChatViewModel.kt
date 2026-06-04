@@ -184,12 +184,13 @@ class AiChatViewModel @Inject constructor(
         }
     }
 
-    fun saveConfig(providerType: String, baseUrl: String, apiKey: String, model: String) {
+    fun saveConfig(providerType: String, baseUrl: String, apiKey: String, model: String, serverUrl: String = "") {
         prefs.edit()
             .putString("provider_type", providerType)
             .putString("base_url", baseUrl)
             .putString("api_key", apiKey.trim())
             .putString("model", model.trim())
+            .putString("server_url", serverUrl.trim())
             .apply()
         _showApiKeySetup.value = false
         _showEditSettings.value = false
@@ -217,7 +218,8 @@ class AiChatViewModel @Inject constructor(
             "provider_type" to prefs.getString("provider_type", "deepseek"),
             "base_url" to prefs.getString("base_url", "http://115.190.253.67:3000"),
             "api_key" to prefs.getString("api_key", null),
-            "model" to prefs.getString("model", "deepseek-chat")
+            "model" to prefs.getString("model", "deepseek-chat"),
+            "server_url" to prefs.getString("server_url", "")
         )
     }
 

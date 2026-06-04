@@ -65,6 +65,7 @@ class TaskRepository @Inject constructor(
 
     suspend fun deleteTask(task: Task) {
         taskDao.deleteTask(task.toEntity())
+        syncRepository.syncDate(task.dateMillis)
     }
 
     suspend fun deleteTaskById(id: Long) {

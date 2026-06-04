@@ -70,8 +70,9 @@ class TimelineViewModel @Inject constructor(
             val localTasks = taskRepository.getTasksByDateOnce(_selectedDate.value)
             if (localTasks.isEmpty()) {
                 serverTasks.filter { it.dateMillis == _selectedDate.value }.forEach { task ->
-                    taskRepository.insertTask(task)
+                    taskRepository.restoreTask(task)
                 }
+                refreshTasks()
             }
         }
     }

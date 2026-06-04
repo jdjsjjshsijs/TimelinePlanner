@@ -290,7 +290,7 @@ fun AppNavigation(
                 TextButton(onClick = {
                     showRestoreDialog = false
                     timelineViewModel.restoreAllFromServer { ok ->
-                        // Result handled silently; data refreshes automatically
+                        // Will show snackbar via LaunchedEffect
                     }
                 }) { Text("恢复") }
             },

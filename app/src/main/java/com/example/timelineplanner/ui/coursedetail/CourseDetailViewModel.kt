@@ -3,7 +3,9 @@ package com.example.timelineplanner.ui.coursedetail
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.content.SharedPreferences
+import android.util.Log
 import com.example.timelineplanner.data.repository.CourseRepository
+import com.example.timelineplanner.data.repository.SyncRepository
 import com.example.timelineplanner.model.Course
 import com.example.timelineplanner.ui.theme.TaskColors
 import com.example.timelineplanner.util.ONE_DAY_MILLIS
@@ -25,6 +27,7 @@ private const val DEFAULT_SEMESTER_DAYS = 120L
 @HiltViewModel
 class CourseDetailViewModel @Inject constructor(
     private val courseRepository: CourseRepository,
+    private val syncRepository: SyncRepository,
     @Named("semester_prefs") private val semesterPrefs: SharedPreferences
 ) : ViewModel() {
 
@@ -171,6 +174,7 @@ class CourseDetailViewModel @Inject constructor(
                 .putLong(KEY_SEMESTER_START, _startDate.value)
                 .putLong(KEY_SEMESTER_END, _endDate.value)
                 .apply()
+            try { syncRepository.syncCourses(); Log.d("CourseVM", "syncCourses called") } catch (e: Exception) { Log.e("CourseVM", "syncCourses failed", e) }
             _dismissEvent.emit(Unit)
         }
     }
@@ -179,6 +183,7 @@ class CourseDetailViewModel @Inject constructor(
         val existingId = _editingCourseId.value ?: return
         viewModelScope.launch {
             courseRepository.deleteCourseById(existingId)
+            try { syncRepository.syncCourses(); Log.d("CourseVM", "syncCourses called") } catch (e: Exception) { Log.e("CourseVM", "syncCourses failed", e) }
             _dismissEvent.emit(Unit)
         }
     }

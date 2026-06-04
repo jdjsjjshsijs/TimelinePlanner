@@ -4,12 +4,20 @@ import csv
 import io
 from datetime import datetime
 from flask import Flask, request, jsonify, Response
-from flask_cors import CORS
 
 app = Flask(__name__)
-CORS(app)
+
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+    return response
 
 DB_PATH = "timeline_planner.db"
+
+def log(msg):
+    print(f"[SERVER] {msg}", flush=True)
 
 
 def get_db():
@@ -32,6 +40,41 @@ def init_db():
                 order_index INTEGER DEFAULT 0,
                 pause_segments TEXT DEFAULT '[]',
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS practice_subjects (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                color TEXT DEFAULT '#4A90D9',
+                created_at INTEGER NOT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS practice_records (
+                id INTEGER PRIMARY KEY,
+                subject_id INTEGER NOT NULL,
+                total_questions INTEGER NOT NULL,
+                correct_questions INTEGER NOT NULL,
+                accuracy REAL NOT NULL,
+                date_millis INTEGER NOT NULL,
+                notes TEXT DEFAULT '',
+                FOREIGN KEY(subject_id) REFERENCES practice_subjects(id) ON DELETE CASCADE
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS courses (
+                id INTEGER PRIMARY KEY,
+                title TEXT NOT NULL,
+                location TEXT DEFAULT '',
+                teacher TEXT DEFAULT '',
+                days_of_week TEXT NOT NULL,
+                start_minute INTEGER NOT NULL,
+                end_minute INTEGER NOT NULL,
+                color TEXT DEFAULT '#4A90D9',
+                notes TEXT DEFAULT '',
+                start_date INTEGER NOT NULL,
+                end_date INTEGER NOT NULL
             )
         """)
         conn.commit()
@@ -70,6 +113,10 @@ def sync_tasks():
             ))
         conn.commit()
 
+    log(f"Tasks synced: {len(tasks)} tasks for date {date_millis}")
+    for t in tasks:
+        tid, tt, ts, te = t['id'], t['title'], t['startMinute'], t['endMinute']
+        log(f'  - [{tid}] {tt} ({ts}-{te})')
     return jsonify({"ok": True, "count": len(tasks)})
 
 
@@ -127,6 +174,7 @@ def get_all_tasks():
             "pauseSegments": segments
         })
 
+    log(f"Fetch all tasks: {len(tasks)} found")
     return jsonify({"tasks": tasks})
 
 
@@ -136,6 +184,7 @@ def delete_task(task_id):
     with get_db() as conn:
         conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
         conn.commit()
+    log(f'Task [{task_id}] deleted')
     return jsonify({"ok": True})
 
 
@@ -193,6 +242,92 @@ def export_json():
         mimetype="application/json",
         headers={"Content-Disposition": "attachment; filename=tasks_export.json"}
     )
+
+
+
+
+@app.route("/api/practice/sync", methods=["POST"])
+def sync_practice():
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "missing data"}), 400
+    subjects = data.get("subjects", [])
+    records = data.get("records", [])
+    with get_db() as conn:
+        for s in subjects:
+            conn.execute(
+                "INSERT OR REPLACE INTO practice_subjects (id, name, color, created_at) VALUES (?, ?, ?, ?)",
+                (s["id"], s["name"], s.get("color", "#4A90D9"), s["createdAt"]),
+            )
+        for r in records:
+            conn.execute(
+                "INSERT OR REPLACE INTO practice_records (id, subject_id, total_questions, correct_questions, accuracy, date_millis, notes) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (r["id"], r["subjectId"], r["totalQuestions"], r["correctQuestions"],
+                 r["accuracy"], r["dateMillis"], r.get("notes", "")),
+            )
+        conn.commit()
+    log(f"Practice synced: {len(subjects)} subjects, {len(records)} records")
+    for s in subjects:
+        sid, sn = s['id'], s['name']
+        log(f'  - Subject [{sid}] {sn}]')
+    return jsonify({"ok": True, "count": len(subjects) + len(records)})
+
+
+@app.route("/api/practice/all", methods=["GET"])
+def get_all_practice():
+    with get_db() as conn:
+        subjects = [dict(r) for r in conn.execute("SELECT * FROM practice_subjects").fetchall()]
+        records = [dict(r) for r in conn.execute("SELECT * FROM practice_records").fetchall()]
+    log(f"Fetch practice: {len(subjects)} subjects, {len(records)} records")
+    return jsonify({
+        "subjects": [{"id": s["id"], "name": s["name"], "color": s["color"], "createdAt": s["created_at"]} for s in subjects],
+        "records": [{"id": r["id"], "subjectId": r["subject_id"], "totalQuestions": r["total_questions"],
+                      "correctQuestions": r["correct_questions"], "accuracy": r["accuracy"],
+                      "dateMillis": r["date_millis"], "notes": r["notes"]} for r in records],
+    })
+
+
+@app.route("/api/courses/sync", methods=["POST"])
+def sync_courses():
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "missing data"}), 400
+    courses = data if isinstance(data, list) else data.get("courses", [])
+    with get_db() as conn:
+        for cr in courses:
+            conn.execute(
+                "INSERT OR REPLACE INTO courses (id, title, location, teacher, days_of_week, start_minute, end_minute, color, notes, start_date, end_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (cr["id"], cr["title"], cr.get("location", ""), cr.get("teacher", ""),
+                 cr["daysOfWeek"], cr["startMinute"], cr["endMinute"],
+                 cr.get("color", "#4A90D9"), cr.get("notes", ""),
+                 cr["startDate"], cr["endDate"]),
+            )
+        conn.commit()
+    log(f"Courses synced: {len(courses)} courses")
+    for cr in courses:
+        cid, ct = cr['id'], cr['title']
+        cd = cr.get('daysOfWeek', '?')
+        cs, ce = cr.get('startMinute', 0), cr.get('endMinute', 0)
+        log(f'  - [{cid}] {ct} days={cd} {cs//60}:{cs%60:02d}-{ce//60}:{ce%60:02d}')
+    return jsonify({"ok": True, "count": len(courses)})
+
+
+@app.route("/api/courses/all", methods=["GET"])
+def get_all_courses():
+    with get_db() as conn:
+        rows = conn.execute("SELECT * FROM courses").fetchall()
+    courses = []
+    for r in rows:
+        courses.append({
+            "id": r["id"], "title": r["title"],
+            "location": r["location"], "teacher": r["teacher"],
+            "daysOfWeek": r["days_of_week"],
+            "startMinute": r["start_minute"], "endMinute": r["end_minute"],
+            "color": r["color"], "notes": r["notes"],
+            "startDate": r["start_date"], "endDate": r["end_date"],
+        })
+    log(f"Fetch courses: {len(courses)} found")
+    return jsonify({"courses": courses})
 
 
 if __name__ == "__main__":

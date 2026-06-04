@@ -135,8 +135,8 @@ fun AiChatScreen(
         val config = viewModel.getConfig()
         ApiConfigDialog(
             config = config,
-            onSave = { providerType, baseUrl, apiKey, model ->
-                viewModel.saveConfig(providerType, baseUrl, apiKey, model)
+            onSave = { providerType, baseUrl, apiKey, model, srvUrl ->
+                viewModel.saveConfig(providerType, baseUrl, apiKey, model, srvUrl)
             },
             onDismiss = { /* 首次设置时不允许跳过 */ }
         )
@@ -147,8 +147,8 @@ fun AiChatScreen(
         val config = viewModel.getConfig()
         ApiConfigDialog(
             config = config,
-            onSave = { providerType, baseUrl, apiKey, model ->
-                viewModel.saveConfig(providerType, baseUrl, apiKey, model)
+            onSave = { providerType, baseUrl, apiKey, model, srvUrl ->
+                viewModel.saveConfig(providerType, baseUrl, apiKey, model, srvUrl)
             },
             onDismiss = { viewModel.closeEditSettings() }
         )
@@ -195,7 +195,7 @@ fun AiChatScreen(
 @Composable
 private fun ApiConfigDialog(
     config: Map<String, String?>,
-    onSave: (providerType: String, baseUrl: String, apiKey: String, model: String) -> Unit,
+    onSave: (providerType: String, baseUrl: String, apiKey: String, model: String, serverUrl: String) -> Unit,
     onDismiss: () -> Unit
 ) {
     val initialProvider = config["provider_type"] ?: "deepseek"
@@ -203,6 +203,7 @@ private fun ApiConfigDialog(
     var baseUrl by remember { mutableStateOf(config["base_url"] ?: "http://115.190.253.67:3000") }
     var apiKey by remember { mutableStateOf(config["api_key"] ?: "") }
     var model by remember { mutableStateOf(config["model"] ?: "deepseek-chat") }
+    var serverUrl by remember { mutableStateOf(config["server_url"] ?: "") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -291,6 +292,23 @@ private fun ApiConfigDialog(
                     )
                 }
 
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = serverUrl,
+                    onValueChange = { serverUrl = it },
+                    label = { Text("同步服务器地址") },
+                    placeholder = { Text("http://115.190.253.67:5000/") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "留空使用默认地址，用于数据同步和恢复。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     text = "选择 DeepSeek 官方时使用默认模型 deepseek-chat。",
@@ -303,7 +321,7 @@ private fun ApiConfigDialog(
             val effectiveBaseUrl = if (selectedProvider == "deepseek") "http://115.190.253.67:3000" else baseUrl
             val effectiveModel = if (selectedProvider == "deepseek") "deepseek-chat" else model
             Button(
-                onClick = { onSave(selectedProvider, effectiveBaseUrl, apiKey, effectiveModel) },
+                onClick = { onSave(selectedProvider, effectiveBaseUrl, apiKey, effectiveModel, serverUrl) },
                 enabled = apiKey.isNotBlank() && (selectedProvider == "deepseek" || (baseUrl.isNotBlank() && model.isNotBlank()))
             ) {
                 Text("保存")

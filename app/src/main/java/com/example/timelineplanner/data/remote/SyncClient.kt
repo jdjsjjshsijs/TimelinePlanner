@@ -1,5 +1,6 @@
 package com.example.timelineplanner.data.remote
 
+import android.content.SharedPreferences
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -8,9 +9,14 @@ import java.util.concurrent.TimeUnit
 
 object SyncClient {
 
-    private const val SERVER_URL = "http://115.190.253.67:5000/"
+    private const val DEFAULT_SERVER_URL = "http://115.190.253.67:5000/"
 
-    fun createApi(): SyncApi {
+    fun getServerUrl(prefs: SharedPreferences? = null): String {
+        val configured = prefs?.getString("server_url", "")?.trim()
+        return if (!configured.isNullOrEmpty()) configured else DEFAULT_SERVER_URL
+    }
+
+    private fun buildApi(serverUrl: String): SyncApi {
         val logging = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BODY
         }
@@ -23,10 +29,29 @@ object SyncClient {
             .build()
 
         return Retrofit.Builder()
-            .baseUrl(SERVER_URL)
+            .baseUrl(serverUrl)
             .client(client)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(SyncApi::class.java)
+    }
+
+    private var cachedApi: SyncApi? = null
+    private var cachedUrl: String? = null
+    private var prefsRef: SharedPreferences? = null
+
+    fun createApi(prefs: SharedPreferences? = null): SyncApi {
+        prefsRef = prefs
+        val url = getServerUrl(prefs)
+        if (cachedApi != null && cachedUrl == url) return cachedApi!!
+        cachedApi = buildApi(url)
+        cachedUrl = url
+        return cachedApi!!
+    }
+
+    fun refresh(): SyncApi {
+        cachedApi = null
+        cachedUrl = null
+        return createApi(prefsRef)
     }
 }

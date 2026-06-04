@@ -25,6 +25,9 @@ class TimetableViewModel @Inject constructor(
         viewModelScope.launch {
             courseRepository.getAllCourses().collect {
                 _courses.value = it
+                if (it.isNotEmpty()) {
+                    syncRepository.syncCourses()
+                }
             }
         }
     }
