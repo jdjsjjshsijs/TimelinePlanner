@@ -161,15 +161,15 @@ class TaskDetailViewModel @Inject constructor(
     }
 
     fun requestEndTimer() {
+        _endConfirmVisible.value = true
+    }
+
+    fun onEndTimerConfirmed() {
         if (_timerState.value == TimerState.PAUSED) {
             val nowMinute = getCurrentMinute()
             val segment = pendingPauseStartMinute to nowMinute
             _pauseSegments.value = _pauseSegments.value + segment
         }
-        _endConfirmVisible.value = true
-    }
-
-    fun onEndTimerConfirmed() {
         val nowMinute = getCurrentMinute()
         val startMinTotal = _startHour.value * 60 + _startMinute.value
         val endMinTotal = if (nowMinute <= startMinTotal) startMinTotal + 1 else nowMinute

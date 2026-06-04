@@ -97,10 +97,13 @@ class TaskRepository @Inject constructor(
         syncRepository.syncDate(existing.dateMillis)
     }
 
+    companion object {
+        private val SEGMENT_LIST_TYPE = object : TypeToken<List<List<Int>>>() {}.type
+    }
+
     private fun TaskEntity.toDomainModel(): Task {
-        val type = object : TypeToken<List<List<Int>>>() {}.type
         val segments: List<List<Int>> = try {
-            gson.fromJson(pauseSegments, type) ?: emptyList()
+            gson.fromJson(pauseSegments, SEGMENT_LIST_TYPE) ?: emptyList()
         } catch (_: Exception) {
             emptyList()
         }
@@ -113,7 +116,7 @@ class TaskRepository @Inject constructor(
             color = color,
             notes = notes,
             orderIndex = orderIndex,
-            pauseSegments = segments.map { (it[0] to it[1]) }
+            pauseSegments = segments.filter { it.size >= 2 }.map { (it[0] to it[1]) }
         )
     }
 

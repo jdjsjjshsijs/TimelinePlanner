@@ -1,15 +1,19 @@
-package com.example.timelineplanner.ui.summary
+﻿package com.example.timelineplanner.ui.summary
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.timelineplanner.data.repository.TaskRepository
+import com.example.timelineplanner.data.repository.CourseRepository
 import com.example.timelineplanner.model.Task
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.example.timelineplanner.util.ONE_DAY_MILLIS
 import com.example.timelineplanner.util.todayStartMillis
 import javax.inject.Inject
 
@@ -18,7 +22,8 @@ data class TaskSummaryItem(
     val color: String,
     val durationMinutes: Int,
     val percentage: Float,
-    val timeRanges: List<Pair<Int, Int>>
+    val timeRanges: List<Pair<Int, Int>>,
+    val isCourse: Boolean = false
 )
 
 enum class SummaryPeriod(val label: String) {
@@ -30,7 +35,8 @@ enum class SummaryPeriod(val label: String) {
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class DailySummaryViewModel @Inject constructor(
-    private val taskRepository: TaskRepository
+    private val taskRepository: TaskRepository,
+    private val courseRepository: CourseRepository
 ) : ViewModel() {
 
     private val _selectedDate = MutableStateFlow(todayStartMillis())
@@ -51,7 +57,8 @@ class DailySummaryViewModel @Inject constructor(
                 taskRepository.getTasksByDate(date)
             }.collect { tasks ->
                 if (_period.value == SummaryPeriod.DAY) {
-                    processTasks(tasks)
+                    val courseTasks = courseRepository.generateCourseTasksForDate(_selectedDate.value)
+                    processTasks(tasks + courseTasks)
                 }
             }
         }
@@ -77,7 +84,8 @@ class DailySummaryViewModel @Inject constructor(
             // DAY uses Flow, re-trigger by reloading
             viewModelScope.launch {
                 val tasks = taskRepository.getTasksByDateOnce(_selectedDate.value)
-                processTasks(tasks)
+                val courseTasks = courseRepository.generateCourseTasksForDate(_selectedDate.value)
+                processTasks(tasks + courseTasks)
             }
         } else {
             loadForPeriod()
@@ -88,7 +96,16 @@ class DailySummaryViewModel @Inject constructor(
         viewModelScope.launch {
             val range = getDateRange(_selectedDate.value, _period.value)
             val tasks = taskRepository.getTasksByDateRange(range.first, range.second)
-            processTasks(tasks)
+
+            // Generate course tasks for each day in the range
+            val courseTasks = mutableListOf<Task>()
+            var currentDay = range.first
+            while (currentDay < range.second) {
+                courseTasks.addAll(courseRepository.generateCourseTasksForDate(currentDay))
+                currentDay += ONE_DAY_MILLIS
+            }
+
+            processTasks(tasks + courseTasks)
         }
     }
 
@@ -97,7 +114,8 @@ class DailySummaryViewModel @Inject constructor(
         return when (period) {
             SummaryPeriod.DAY -> dateMillis to dateMillis + ONE_DAY_MILLIS
             SummaryPeriod.WEEK -> {
-                cal.set(java.util.Calendar.DAY_OF_WEEK, cal.firstDayOfWeek)
+                cal.firstDayOfWeek = java.util.Calendar.MONDAY
+                cal.set(java.util.Calendar.DAY_OF_WEEK, java.util.Calendar.MONDAY)
                 cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
                 cal.set(java.util.Calendar.MINUTE, 0)
                 cal.set(java.util.Calendar.SECOND, 0)
@@ -118,7 +136,7 @@ class DailySummaryViewModel @Inject constructor(
         }
     }
 
-    private val ONE_DAY_MILLIS = 24 * 60 * 60 * 1000L
+
 
     private fun getEffectiveDuration(task: Task): Int {
         val total = task.endMinute - task.startMinute
@@ -134,6 +152,7 @@ class DailySummaryViewModel @Inject constructor(
             tasks.groupBy { it.title }.map { (title, group) ->
                 val duration = group.sumOf { getEffectiveDuration(it) }
                 val color = group.first().color
+                val isCourse = group.any { it.id < 0 }
                 val ranges = group.map { it.startMinute to it.endMinute }
                     .sortedBy { it.first }
                 TaskSummaryItem(
@@ -141,7 +160,8 @@ class DailySummaryViewModel @Inject constructor(
                     color = color,
                     durationMinutes = duration,
                     percentage = duration.toFloat() / totalMinutes * 100f,
-                    timeRanges = ranges
+                    timeRanges = ranges,
+                    isCourse = isCourse
                 )
             }.sortedByDescending { it.durationMinutes }
         } else {

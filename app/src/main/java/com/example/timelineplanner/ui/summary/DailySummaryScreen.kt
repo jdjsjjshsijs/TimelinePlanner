@@ -527,6 +527,13 @@ private fun TaskSummaryRow(item: TaskSummaryItem) {
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium
             )
+            if (item.isCourse) {
+                Text(
+                    text = "课程",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
             if (showTimeRange) {
                 Text(
                     text = timeRangeText,

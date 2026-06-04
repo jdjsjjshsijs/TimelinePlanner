@@ -57,11 +57,17 @@ class AiOperationExecutor(
         val notes = data["notes"] as? String ?: ""
         val taskDate = (data["dateMillis"] as? Double)?.toLong() ?: defaultDateMillis
 
+        val safeStart = startMinute.coerceIn(0, 1439)
+        val safeEnd = endMinute.coerceIn(0, 1439)
+        if (safeStart >= safeEnd) {
+            messages.add("?????????????????")
+            return null
+        }
         val task = Task(
             title = title,
             dateMillis = taskDate,
-            startMinute = startMinute.coerceIn(0, 1439),
-            endMinute = endMinute.coerceIn(0, 1439),
+            startMinute = safeStart,
+            endMinute = safeEnd,
             color = color,
             notes = notes
         )
@@ -97,10 +103,16 @@ class AiOperationExecutor(
             val newColor = data["color"] as? String ?: matchedTask.color
             val newNotes = data["notes"] as? String ?: matchedTask.notes
 
+            val safeNewStart = newStart.coerceIn(0, 1439)
+            val safeNewEnd = newEnd.coerceIn(0, 1439)
+            if (safeNewStart >= safeNewEnd) {
+                messages.add("?????????????????")
+                continue
+            }
             val updatedTask = matchedTask.copy(
                 title = newTitle,
-                startMinute = newStart.coerceIn(0, 1439),
-                endMinute = newEnd.coerceIn(0, 1439),
+                startMinute = safeNewStart,
+                endMinute = safeNewEnd,
                 color = newColor,
                 notes = newNotes
             )

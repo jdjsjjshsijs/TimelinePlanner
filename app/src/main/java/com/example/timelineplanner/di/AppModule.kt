@@ -7,16 +7,19 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.example.timelineplanner.data.db.AppDatabase
 import com.example.timelineplanner.data.db.ChatMessageDao
+import com.example.timelineplanner.data.db.CourseDao
 import com.example.timelineplanner.data.db.TaskDao
 import com.example.timelineplanner.data.remote.SyncApi
 import com.example.timelineplanner.data.remote.SyncClient
 import com.example.timelineplanner.data.repository.AiTaskRepository
+import com.example.timelineplanner.data.repository.CourseRepository
 import com.example.timelineplanner.data.repository.TaskRepository
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import javax.inject.Named
 import javax.inject.Singleton
 
 @Module
@@ -30,7 +33,9 @@ object AppModule {
             context,
             AppDatabase::class.java,
             "timeline_planner.db"
-        ).build()
+        )
+            .addMigrations(AppDatabase.MIGRATION_3_4)
+            .build()
     }
 
     @Provides
@@ -43,6 +48,18 @@ object AppModule {
     @Singleton
     fun provideChatMessageDao(database: AppDatabase): ChatMessageDao {
         return database.chatMessageDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideCourseDao(database: AppDatabase): CourseDao {
+        return database.courseDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideCourseRepository(courseDao: CourseDao): CourseRepository {
+        return CourseRepository(courseDao)
     }
 
     @Provides
@@ -79,6 +96,13 @@ object AppModule {
         }
 
         return encryptedPrefs
+    }
+
+    @Provides
+    @Singleton
+    @Named("semester_prefs")
+    fun provideSemesterPrefs(@ApplicationContext context: Context): SharedPreferences {
+        return context.getSharedPreferences("semester_prefs", Context.MODE_PRIVATE)
     }
 
     @Provides

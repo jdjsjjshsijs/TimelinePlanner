@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.outlined.Chat
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.outlined.Analytics
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -42,6 +43,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.timelineplanner.model.Task
 import com.example.timelineplanner.ui.aichat.AiChatScreen
 import com.example.timelineplanner.ui.aichat.AiChatViewModel
+import com.example.timelineplanner.ui.coursedetail.CourseDetailSheet
+import com.example.timelineplanner.ui.coursedetail.CourseDetailViewModel
 import com.example.timelineplanner.ui.taskdetail.TaskDetailSheet
 import com.example.timelineplanner.ui.taskdetail.TaskDetailViewModel
 import com.example.timelineplanner.ui.summary.DailySummaryScreen
@@ -60,11 +63,14 @@ fun AppNavigation(
     timelineViewModel: TimelineViewModel = hiltViewModel(),
     aiChatViewModel: AiChatViewModel = hiltViewModel(),
     taskDetailViewModel: TaskDetailViewModel = hiltViewModel(),
-    summaryViewModel: DailySummaryViewModel = hiltViewModel()
+    summaryViewModel: DailySummaryViewModel = hiltViewModel(),
+    courseDetailViewModel: CourseDetailViewModel = hiltViewModel()
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     var editingTaskId by remember { mutableStateOf<Long?>(null) }
     var showTaskSheet by remember { mutableStateOf(false) }
+    var editingCourseId by remember { mutableStateOf<Long?>(null) }
+    var showCourseSheet by remember { mutableStateOf(false) }
     val selectedDate by timelineViewModel.selectedDate.collectAsState()
     val canUndo by timelineViewModel.canUndo.collectAsState()
 
@@ -141,9 +147,16 @@ fun AppNavigation(
                 TimelineScreen(
                     viewModel = timelineViewModel,
                     onTaskClick = { task ->
-                        editingTaskId = task.id
-                        taskDetailViewModel.setCurrentDate(selectedDate)
-                        showTaskSheet = true
+                        if (task.id < 0) {
+                            // Course task — open course editor
+                            val courseId = (-task.id) / 10
+                            editingCourseId = courseId
+                            showCourseSheet = true
+                        } else {
+                            editingTaskId = task.id
+                            taskDetailViewModel.setCurrentDate(selectedDate)
+                            showTaskSheet = true
+                        }
                     },
                     onEmptyAreaClick = { startMinute ->
                         editingTaskId = null
@@ -170,6 +183,15 @@ fun AppNavigation(
                                 showTaskSheet = true
                             },
                             leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("新建课程") },
+                            onClick = {
+                                fabMenuExpanded = false
+                                editingCourseId = null
+                                showCourseSheet = true
+                            },
+                            leadingIcon = { Icon(Icons.Default.MenuBook, contentDescription = null) }
                         )
                         if (canUndo) {
                             DropdownMenuItem(
@@ -209,6 +231,18 @@ fun AppNavigation(
             onDismiss = {
                 showTaskSheet = false
                 editingTaskId = null
+                timelineViewModel.refreshTasks()
+            }
+        )
+    }
+
+    if (showCourseSheet) {
+        CourseDetailSheet(
+            viewModel = courseDetailViewModel,
+            courseId = editingCourseId,
+            onDismiss = {
+                showCourseSheet = false
+                editingCourseId = null
                 timelineViewModel.refreshTasks()
             }
         )

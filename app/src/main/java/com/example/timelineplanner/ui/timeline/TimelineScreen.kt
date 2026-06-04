@@ -1,4 +1,4 @@
-package com.example.timelineplanner.ui.timeline
+﻿package com.example.timelineplanner.ui.timeline
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -41,6 +41,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -202,6 +203,7 @@ fun TimelineScreen(
                 TimeGrid(hourHeightDp = hourHeightDp)
 
                 groupedTasks.forEach { layout ->
+                    key(layout.task.id) {
                     TaskBar(
                         task = layout.task,
                         columnCount = layout.maxOverlap,
@@ -210,15 +212,20 @@ fun TimelineScreen(
                         isSelected = layout.task.id in selectedTaskIds,
                         onClick = {
                             if (selectedTaskIds.isNotEmpty()) {
-                                viewModel.toggleSelection(layout.task.id)
+                                if (layout.task.id > 0) {
+                                    viewModel.toggleSelection(layout.task.id)
+                                }
                             } else {
                                 onTaskClick(layout.task)
                             }
                         },
                         onLongClick = {
-                            viewModel.startSelectionMode(layout.task.id)
+                            if (layout.task.id > 0) {
+                                viewModel.startSelectionMode(layout.task.id)
+                            }
                         }
                     )
+                    }
                 }
             }
         }

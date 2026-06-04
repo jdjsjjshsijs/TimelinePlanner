@@ -2,18 +2,22 @@ package com.example.timelineplanner.ui.timeline
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.timelineplanner.data.repository.CourseRepository
 import com.example.timelineplanner.data.repository.SyncRepository
 import com.example.timelineplanner.data.repository.TaskRepository
 import com.example.timelineplanner.model.Task
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.example.timelineplanner.util.todayStartMillis
 import javax.inject.Inject
 
@@ -26,6 +30,7 @@ sealed class UndoAction {
 @HiltViewModel
 class TimelineViewModel @Inject constructor(
     private val taskRepository: TaskRepository,
+    private val courseRepository: CourseRepository,
     private val syncRepository: SyncRepository
 ) : ViewModel() {
 
@@ -47,6 +52,9 @@ class TimelineViewModel @Inject constructor(
     val canUndo: StateFlow<Boolean> = _canUndo.asStateFlow()
 
     private val undoStack = mutableListOf<UndoAction>()
+    private companion object {
+        const val MAX_UNDO_STACK_SIZE = 20
+    }
 
     private var loadJob: Job? = null
 
@@ -72,7 +80,11 @@ class TimelineViewModel @Inject constructor(
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
             taskRepository.getTasksByDate(_selectedDate.value).collect { taskList ->
-                _tasks.value = taskList
+                val merged = withContext(Dispatchers.Default) {
+                    val courseTasks = courseRepository.generateCourseTasksForDate(_selectedDate.value)
+                    (taskList + courseTasks).sortedBy { it.startMinute }
+                }
+                _tasks.value = merged
             }
         }
     }
@@ -85,8 +97,12 @@ class TimelineViewModel @Inject constructor(
 
     fun refreshTasks() {
         viewModelScope.launch {
-            val taskList = taskRepository.getTasksByDateOnce(_selectedDate.value)
-            _tasks.value = taskList
+            val merged = withContext(Dispatchers.Default) {
+                val taskList = taskRepository.getTasksByDateOnce(_selectedDate.value)
+                val courseTasks = courseRepository.generateCourseTasksForDate(_selectedDate.value)
+                (taskList + courseTasks).sortedBy { it.startMinute }
+            }
+            _tasks.value = merged
         }
     }
 
@@ -127,6 +143,9 @@ class TimelineViewModel @Inject constructor(
     }
 
     private fun pushUndo(action: UndoAction) {
+        if (undoStack.size >= MAX_UNDO_STACK_SIZE) {
+            undoStack.removeAt(0)
+        }
         undoStack.add(action)
         _canUndo.value = undoStack.isNotEmpty()
     }
@@ -138,7 +157,7 @@ class TimelineViewModel @Inject constructor(
         viewModelScope.launch {
             when (action) {
                 is UndoAction.Delete -> {
-                    action.tasks.forEach { taskRepository.insertTask(it) }
+                    action.tasks.forEach { taskRepository.restoreTask(it) }
                 }
                 is UndoAction.Create -> {
                     taskRepository.deleteTaskById(action.taskId)

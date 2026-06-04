@@ -1,4 +1,4 @@
-package com.example.timelineplanner.data.repository
+﻿package com.example.timelineplanner.data.repository
 
 import android.util.Log
 import com.example.timelineplanner.data.db.TaskDao
@@ -10,7 +10,9 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,18 +28,26 @@ class SyncRepository @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val gson = Gson()
 
+    private val pendingSyncs = mutableMapOf<Long, Job>()
+
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
 
+    companion object {
+        private val SEGMENT_LIST_TYPE = object : TypeToken<List<List<Int>>>() {}.type
+        private const val SYNC_DEBOUNCE_MS = 500L
+    }
+
     fun syncDate(dateMillis: Long) {
-        scope.launch {
+        pendingSyncs[dateMillis]?.cancel()
+        pendingSyncs[dateMillis] = scope.launch {
+            delay(SYNC_DEBOUNCE_MS)
             _isSyncing.value = true
             try {
                 val entities = taskDao.getTasksByDateOnce(dateMillis)
                 val tasks = entities.map { e ->
-                    val type = object : TypeToken<List<List<Int>>>() {}.type
                     val segments: List<List<Int>> = try {
-                        gson.fromJson(e.pauseSegments, type) ?: emptyList()
+                        gson.fromJson(e.pauseSegments, SEGMENT_LIST_TYPE) ?: emptyList()
                     } catch (_: Exception) {
                         emptyList()
                     }
@@ -59,6 +69,7 @@ class SyncRepository @Inject constructor(
                 Log.w("Sync", "Sync failed: ${e.message}")
             } finally {
                 _isSyncing.value = false
+                pendingSyncs.remove(dateMillis)
             }
         }
     }
