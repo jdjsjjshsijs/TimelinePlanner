@@ -1,8 +1,17 @@
 ﻿package com.example.timelineplanner.data.repository
 
 import android.util.Log
+import com.example.timelineplanner.data.db.CourseDao
+import com.example.timelineplanner.data.db.CourseEntity
+import com.example.timelineplanner.data.db.PracticeDao
+import com.example.timelineplanner.data.db.PracticeRecordEntity
+import com.example.timelineplanner.data.db.PracticeSubjectEntity
 import com.example.timelineplanner.data.db.TaskDao
 import com.example.timelineplanner.data.remote.SyncApi
+import com.example.timelineplanner.data.remote.SyncCourse
+import com.example.timelineplanner.data.remote.SyncPracticeRecord
+import com.example.timelineplanner.data.remote.SyncPracticeRequest
+import com.example.timelineplanner.data.remote.SyncPracticeSubject
 import com.example.timelineplanner.data.remote.SyncRequest
 import com.example.timelineplanner.data.remote.SyncTask
 import com.example.timelineplanner.model.Task
@@ -23,7 +32,9 @@ import javax.inject.Singleton
 @Singleton
 class SyncRepository @Inject constructor(
     private val syncApi: SyncApi,
-    private val taskDao: TaskDao
+    private val taskDao: TaskDao,
+    private val practiceDao: PracticeDao,
+    private val courseDao: CourseDao
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val gson = Gson()
@@ -74,6 +85,43 @@ class SyncRepository @Inject constructor(
         }
     }
 
+    fun syncPractice() {
+        scope.launch {
+            _isSyncing.value = true
+            try {
+                val subjects = practiceDao.getAllSubjectsOnce().map { s ->
+                    SyncPracticeSubject(s.id, s.name, s.color, s.createdAt)
+                }
+                val records = practiceDao.getAllRecordsOnce().map { r ->
+                    SyncPracticeRecord(r.id, r.subjectId, r.totalQuestions, r.correctQuestions, r.accuracy, r.dateMillis, r.notes)
+                }
+                syncApi.syncPractice(SyncPracticeRequest(subjects, records))
+                Log.d("Sync", "Synced ${subjects.size} practice subjects, ${records.size} records")
+            } catch (e: Exception) {
+                Log.w("Sync", "Practice sync failed: ${e.message}")
+            } finally {
+                _isSyncing.value = false
+            }
+        }
+    }
+
+    fun syncCourses() {
+        scope.launch {
+            _isSyncing.value = true
+            try {
+                val courses = courseDao.getAllCoursesOnce().map { c ->
+                    SyncCourse(c.id, c.title, c.location, c.teacher, c.daysOfWeek, c.startMinute, c.endMinute, c.color, c.notes, c.startDate, c.endDate)
+                }
+                syncApi.syncCourses(courses)
+                Log.d("Sync", "Synced ${courses.size} courses")
+            } catch (e: Exception) {
+                Log.w("Sync", "Course sync failed: ${e.message}")
+            } finally {
+                _isSyncing.value = false
+            }
+        }
+    }
+
     suspend fun fetchAllTasks(): List<Task>? {
         return try {
             val response = syncApi.getAllTasks()
@@ -93,6 +141,66 @@ class SyncRepository @Inject constructor(
         } catch (e: Exception) {
             Log.w("Sync", "Fetch failed: ${e.message}")
             null
+        }
+    }
+
+    suspend fun restoreAllFromServer(): Boolean {
+        _isSyncing.value = true
+        try {
+            // Restore tasks
+            val serverTasks = fetchAllTasks()
+            if (serverTasks != null) {
+                for (task in serverTasks) {
+                    val existing = taskDao.getTaskById(task.id)
+                    if (existing == null) {
+                        val segments = task.pauseSegments.map { listOf(it.first, it.second) }
+                        taskDao.insertTaskWithId(
+                            task.id, task.title, task.dateMillis,
+                            task.startMinute, task.endMinute, task.color,
+                            task.notes, task.orderIndex, gson.toJson(segments)
+                        )
+                    }
+                }
+            }
+
+            // Restore practice data
+            val practiceData = try { syncApi.getAllPractice() } catch (_: Exception) { null }
+            if (practiceData != null) {
+                for (s in practiceData.subjects) {
+                    val existing = practiceDao.getSubjectById(s.id)
+                    if (existing == null) {
+                        practiceDao.insertSubject(
+                            PracticeSubjectEntity(s.id, s.name, s.color, s.createdAt)
+                        )
+                    }
+                }
+                for (r in practiceData.records) {
+                    practiceDao.insertRecord(
+                        PracticeRecordEntity(r.id, r.subjectId, r.totalQuestions, r.correctQuestions, r.accuracy, r.dateMillis, r.notes)
+                    )
+                }
+            }
+
+            // Restore courses
+            val courseData = try { syncApi.getAllCourses() } catch (_: Exception) { null }
+            if (courseData != null) {
+                for (c in courseData.courses) {
+                    val existing = courseDao.getCourseById(c.id)
+                    if (existing == null) {
+                        courseDao.insertCourse(
+                            CourseEntity(c.id, c.title, c.location, c.teacher, c.daysOfWeek, c.startMinute, c.endMinute, c.color, c.notes, c.startDate, c.endDate)
+                        )
+                    }
+                }
+            }
+
+            Log.d("Sync", "Restore from server complete")
+            return true
+        } catch (e: Exception) {
+            Log.w("Sync", "Restore failed: ${e.message}")
+            return false
+        } finally {
+            _isSyncing.value = false
         }
     }
 }

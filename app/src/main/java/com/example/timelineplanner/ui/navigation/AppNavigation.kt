@@ -8,8 +8,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
@@ -20,6 +22,8 @@ import androidx.compose.material.icons.outlined.Chat
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.outlined.Analytics
 import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Quiz
+import androidx.compose.material.icons.outlined.Quiz
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -27,6 +31,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -45,12 +50,16 @@ import com.example.timelineplanner.ui.aichat.AiChatScreen
 import com.example.timelineplanner.ui.aichat.AiChatViewModel
 import com.example.timelineplanner.ui.coursedetail.CourseDetailSheet
 import com.example.timelineplanner.ui.coursedetail.CourseDetailViewModel
+import com.example.timelineplanner.ui.practice.PracticeScreen
+import com.example.timelineplanner.ui.practice.PracticeViewModel
 import com.example.timelineplanner.ui.taskdetail.TaskDetailSheet
 import com.example.timelineplanner.ui.taskdetail.TaskDetailViewModel
 import com.example.timelineplanner.ui.summary.DailySummaryScreen
 import com.example.timelineplanner.ui.summary.DailySummaryViewModel
 import com.example.timelineplanner.ui.timeline.TimelineScreen
 import com.example.timelineplanner.ui.timeline.TimelineViewModel
+import com.example.timelineplanner.ui.timetable.TimetableScreen
+import com.example.timelineplanner.ui.timetable.TimetableViewModel
 
 data class BottomNavItem(
     val label: String,
@@ -64,13 +73,17 @@ fun AppNavigation(
     aiChatViewModel: AiChatViewModel = hiltViewModel(),
     taskDetailViewModel: TaskDetailViewModel = hiltViewModel(),
     summaryViewModel: DailySummaryViewModel = hiltViewModel(),
-    courseDetailViewModel: CourseDetailViewModel = hiltViewModel()
+    courseDetailViewModel: CourseDetailViewModel = hiltViewModel(),
+    practiceViewModel: PracticeViewModel = hiltViewModel(),
+    timetableViewModel: TimetableViewModel = hiltViewModel()
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     var editingTaskId by remember { mutableStateOf<Long?>(null) }
     var showTaskSheet by remember { mutableStateOf(false) }
     var editingCourseId by remember { mutableStateOf<Long?>(null) }
     var showCourseSheet by remember { mutableStateOf(false) }
+    var showTimetable by remember { mutableStateOf(false) }
+    var showRestoreDialog by remember { mutableStateOf(false) }
     val selectedDate by timelineViewModel.selectedDate.collectAsState()
     val canUndo by timelineViewModel.canUndo.collectAsState()
 
@@ -102,6 +115,7 @@ fun AppNavigation(
     val tabs = listOf(
         BottomNavItem("日程", Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth),
         BottomNavItem("总结", Icons.Filled.Analytics, Icons.Outlined.Analytics),
+        BottomNavItem("刷题", Icons.Filled.Quiz, Icons.Outlined.Quiz),
         BottomNavItem("AI 助手", Icons.Filled.Chat, Icons.Outlined.Chat)
     )
 
@@ -176,13 +190,20 @@ fun AppNavigation(
                             leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) }
                         )
                         DropdownMenuItem(
-                            text = { Text("新建课程") },
+                            text = { Text("课表") },
                             onClick = {
                                 fabMenuExpanded = false
-                                editingCourseId = null
-                                showCourseSheet = true
+                                showTimetable = true
                             },
                             leadingIcon = { Icon(Icons.Default.MenuBook, contentDescription = null) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("从服务器恢复") },
+                            onClick = {
+                                fabMenuExpanded = false
+                                showRestoreDialog = true
+                            },
+                            leadingIcon = { Icon(Icons.Default.CloudDownload, contentDescription = null) }
                         )
                         if (canUndo) {
                             DropdownMenuItem(
@@ -208,7 +229,11 @@ fun AppNavigation(
                 viewModel = summaryViewModel,
                 modifier = Modifier.padding(paddingValues)
             )
-            2 -> AiChatScreen(
+            2 -> PracticeScreen(
+                viewModel = practiceViewModel,
+                modifier = Modifier.padding(paddingValues)
+            )
+            3 -> AiChatScreen(
                 viewModel = aiChatViewModel,
                 modifier = Modifier.padding(paddingValues)
             )
@@ -235,6 +260,42 @@ fun AppNavigation(
                 showCourseSheet = false
                 editingCourseId = null
                 timelineViewModel.refreshTasks()
+            }
+        )
+    }
+
+    if (showTimetable) {
+        TimetableScreen(
+            viewModel = timetableViewModel,
+            onAddCourse = {
+                showTimetable = false
+                editingCourseId = null
+                showCourseSheet = true
+            },
+            onEditCourse = { courseId ->
+                showTimetable = false
+                editingCourseId = courseId
+                showCourseSheet = true
+            },
+            onBack = { showTimetable = false }
+        )
+    }
+
+    if (showRestoreDialog) {
+        AlertDialog(
+            onDismissRequest = { showRestoreDialog = false },
+            title = { Text("从服务器恢复") },
+            text = { Text("将从服务器下载所有数据（任务、课程、刷题记录）到本地。已有数据不会被覆盖。确认恢复？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showRestoreDialog = false
+                    timelineViewModel.restoreAllFromServer { ok ->
+                        // Result handled silently; data refreshes automatically
+                    }
+                }) { Text("恢复") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRestoreDialog = false }) { Text("取消") }
             }
         )
     }

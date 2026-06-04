@@ -76,6 +76,16 @@ class TimelineViewModel @Inject constructor(
         }
     }
 
+    fun restoreAllFromServer(onDone: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val ok = syncRepository.restoreAllFromServer()
+            if (ok) {
+                loadTasks()
+            }
+            onDone(ok)
+        }
+    }
+
     private fun loadTasks() {
         loadJob?.cancel()
         loadJob = viewModelScope.launch {

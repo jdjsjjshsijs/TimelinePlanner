@@ -8,11 +8,13 @@ import androidx.security.crypto.MasterKey
 import com.example.timelineplanner.data.db.AppDatabase
 import com.example.timelineplanner.data.db.ChatMessageDao
 import com.example.timelineplanner.data.db.CourseDao
+import com.example.timelineplanner.data.db.PracticeDao
 import com.example.timelineplanner.data.db.TaskDao
 import com.example.timelineplanner.data.remote.SyncApi
 import com.example.timelineplanner.data.remote.SyncClient
 import com.example.timelineplanner.data.repository.AiTaskRepository
 import com.example.timelineplanner.data.repository.CourseRepository
+import com.example.timelineplanner.data.repository.PracticeRepository
 import com.example.timelineplanner.data.repository.TaskRepository
 import dagger.Module
 import dagger.Provides
@@ -34,7 +36,7 @@ object AppModule {
             AppDatabase::class.java,
             "timeline_planner.db"
         )
-            .addMigrations(AppDatabase.MIGRATION_3_4)
+            .addMigrations(AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5)
             .build()
     }
 
@@ -58,8 +60,20 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun providePracticeDao(database: AppDatabase): PracticeDao {
+        return database.practiceDao()
+    }
+
+    @Provides
+    @Singleton
     fun provideCourseRepository(courseDao: CourseDao): CourseRepository {
         return CourseRepository(courseDao)
+    }
+
+    @Provides
+    @Singleton
+    fun providePracticeRepository(practiceDao: PracticeDao): PracticeRepository {
+        return PracticeRepository(practiceDao)
     }
 
     @Provides
