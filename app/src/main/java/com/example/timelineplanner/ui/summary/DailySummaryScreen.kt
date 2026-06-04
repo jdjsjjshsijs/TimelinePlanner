@@ -1,4 +1,4 @@
-package com.example.timelineplanner.ui.summary
+﻿package com.example.timelineplanner.ui.summary
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
@@ -501,10 +501,6 @@ private fun TaskSummaryRow(item: TaskSummaryItem) {
     val durationM = item.durationMinutes % 60
     val durationText = if (durationH > 0) "${durationH}时${durationM}分" else "${durationM}分"
 
-    val timeRangeText = item.timeRanges.joinToString("、") { (s, e) ->
-        String.format("%02d:%02d-%02d:%02d", s / 60, s % 60, e / 60, e % 60)
-    }
-
     var showTimeRange by remember { mutableStateOf(false) }
 
     Row(
@@ -535,11 +531,26 @@ private fun TaskSummaryRow(item: TaskSummaryItem) {
                 )
             }
             if (showTimeRange) {
-                Text(
-                    text = timeRangeText,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                val grouped = item.timeRanges.groupBy { it.dateLabel }.toSortedMap()
+                grouped.forEach { (dateLabel, ranges) ->
+                    if (dateLabel.isNotEmpty()) {
+                        Text(
+                            text = dateLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    ranges.sortedBy { it.startMinute }.forEach { entry ->
+                        val time = String.format("%02d:%02d-%02d:%02d", entry.startMinute / 60, entry.startMinute % 60, entry.endMinute / 60, entry.endMinute % 60)
+                        Text(
+                            text = time,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = if (dateLabel.isNotEmpty()) 8.dp else 0.dp)
+                        )
+                    }
+                }
             }
         }
         Column(horizontalAlignment = Alignment.End) {
@@ -556,3 +567,5 @@ private fun TaskSummaryRow(item: TaskSummaryItem) {
         }
     }
 }
+
+

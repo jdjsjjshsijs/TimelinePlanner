@@ -1,4 +1,4 @@
-package com.example.timelineplanner.util
+﻿package com.example.timelineplanner.util
 
 import android.content.Context
 import android.content.SharedPreferences
@@ -35,7 +35,16 @@ class TimerStateStore @Inject constructor(
         prefs.edit().clear().apply()
     }
 
-    fun hasPausedState(): Boolean = prefs.contains("task_id")
+    fun hasPausedState(): Boolean {
+        if (!prefs.contains("task_id")) return false
+        val pauseWallMillis = prefs.getLong("pause_wall_millis", 0L)
+        val oneHourAgo = System.currentTimeMillis() - 60 * 60 * 1000L
+        if (pauseWallMillis < oneHourAgo) {
+            clear()
+            return false
+        }
+        return true
+    }
 
     fun getTaskId(): Long = prefs.getLong("task_id", -1)
 

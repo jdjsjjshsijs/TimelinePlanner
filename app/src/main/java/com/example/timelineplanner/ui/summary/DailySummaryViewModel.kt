@@ -22,8 +22,15 @@ data class TaskSummaryItem(
     val color: String,
     val durationMinutes: Int,
     val percentage: Float,
-    val timeRanges: List<Pair<Int, Int>>,
+    val timeRanges: List<TimeRangeEntry>,
     val isCourse: Boolean = false
+)
+
+data class TimeRangeEntry(
+    val startMinute: Int,
+    val endMinute: Int,
+    val dateLabel: String = "",
+    val dateMillis: Long = 0L
 )
 
 enum class SummaryPeriod(val label: String) {
@@ -147,14 +154,20 @@ class DailySummaryViewModel @Inject constructor(
     private fun processTasks(tasks: List<Task>) {
         val totalMinutes = tasks.sumOf { getEffectiveDuration(it) }
         _totalTaskMinutes.value = totalMinutes
+        val showDate = _period.value != SummaryPeriod.DAY
 
         _summaryItems.value = if (totalMinutes > 0) {
             tasks.groupBy { it.title }.map { (title, group) ->
                 val duration = group.sumOf { getEffectiveDuration(it) }
                 val color = group.first().color
                 val isCourse = group.any { it.id < 0 }
-                val ranges = group.map { it.startMinute to it.endMinute }
-                    .sortedBy { it.first }
+                val ranges = group.sortedWith(compareBy({ it.dateMillis }, { it.startMinute })).map { task ->
+                    val dateLabel = if (showDate) {
+                        val cal = java.util.Calendar.getInstance().apply { timeInMillis = task.dateMillis }
+                        "${cal.get(java.util.Calendar.MONTH) + 1}/${cal.get(java.util.Calendar.DAY_OF_MONTH)}"
+                    } else ""
+                    TimeRangeEntry(task.startMinute, task.endMinute, dateLabel, task.dateMillis)
+                }
                 TaskSummaryItem(
                     title = title,
                     color = color,

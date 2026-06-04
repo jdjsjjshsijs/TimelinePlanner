@@ -1,4 +1,4 @@
-package com.example.timelineplanner.di
+﻿package com.example.timelineplanner.di
 
 import android.content.Context
 import android.content.SharedPreferences
@@ -118,5 +118,12 @@ object AppModule {
         taskRepository: TaskRepository
     ): AiTaskRepository {
         return AiTaskRepository(prefs, taskRepository)
+    }
+
+    @Provides
+    @Singleton
+    @Named("kiosk_prefs")
+    fun provideKioskPrefs(@ApplicationContext context: Context): SharedPreferences {
+        return context.getSharedPreferences("kiosk_prefs", Context.MODE_PRIVATE)
     }
 }

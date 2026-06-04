@@ -4,8 +4,10 @@ import androidx.compose.ui.graphics.Color
 
 // 预设任务颜色调色板（柔和色）
 val TaskColors = listOf(
-    "#4A90D9", "#5B9BD5", "#ED7D31", "#A5A5A5",
-    "#70AD47", "#FFC000", "#4472C4", "#9B59B6"
+    "#4A90D9", "#E74C3C", "#2ECC71", "#F39C12",
+    "#9B59B6", "#1ABC9C", "#E67E22", "#3498DB",
+    "#E91E63", "#00BCD4", "#FF5722", "#607D8B",
+    "#8BC34A", "#FF9800", "#795548", "#009688"
 )
 
 // Light theme

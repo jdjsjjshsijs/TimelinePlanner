@@ -1,4 +1,4 @@
-package com.example.timelineplanner.ui.navigation
+﻿package com.example.timelineplanner.ui.navigation
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -73,15 +73,6 @@ fun AppNavigation(
     var showCourseSheet by remember { mutableStateOf(false) }
     val selectedDate by timelineViewModel.selectedDate.collectAsState()
     val canUndo by timelineViewModel.canUndo.collectAsState()
-
-    // 启动时检查是否有暂停中的计时器，自动恢复
-    LaunchedEffect(Unit) {
-        if (taskDetailViewModel.hasPausedTimer()) {
-            taskDetailViewModel.restorePausedTimer()
-            editingTaskId = taskDetailViewModel.getPausedTaskId()
-            showTaskSheet = true
-        }
-    }
 
     LaunchedEffect(selectedDate) {
         aiChatViewModel.setCurrentDate(selectedDate)

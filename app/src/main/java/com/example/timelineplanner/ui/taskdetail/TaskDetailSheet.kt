@@ -1,4 +1,4 @@
-package com.example.timelineplanner.ui.taskdetail
+﻿package com.example.timelineplanner.ui.taskdetail
 
 import android.content.Intent
 import android.provider.Settings
@@ -51,6 +51,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import android.content.pm.PackageManager
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.graphics.drawable.toBitmap
+import androidx.compose.foundation.Image
 import androidx.compose.ui.unit.dp
 import com.example.timelineplanner.ui.timeline.parseColor
 
@@ -77,6 +86,8 @@ fun TaskDetailSheet(
 
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showPinSettingsDialog by remember { mutableStateOf(false) }
+    var showWhitelistDialog by remember { mutableStateOf(false) }
+    var showAddAppDialog by remember { mutableStateOf(false) }
     val activity = LocalContext.current as? com.example.timelineplanner.MainActivity
 
     val isKioskActive = timerState == TimerState.RUNNING
@@ -169,6 +180,30 @@ fun TaskDetailSheet(
                     onEnd = { viewModel.requestEndTimer() },
                     onSave = { viewModel.saveTimerResult() }
                 )
+                if (timerState == TimerState.RUNNING) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { showWhitelistDialog = true },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Apps, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("切换应用")
+                        }
+                        OutlinedButton(
+                            onClick = { showAddAppDialog = true },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("管理白名单")
+                        }
+                    }
+                }
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
@@ -375,6 +410,109 @@ fun TaskDetailSheet(
                 TextButton(onClick = { showPinSettingsDialog = false }) {
                     Text("取消")
                 }
+            }
+        )
+    }
+
+    // Whitelist: switch app dialog
+    if (showWhitelistDialog && activity != null) {
+        val whitelist = remember { mutableStateOf(activity.getWhitelistedPackages()) }
+        val pm = activity.packageManager
+        val apps = whitelist.value.mapNotNull { pkg ->
+            try {
+                val info = pm.getApplicationInfo(pkg, 0)
+                Triple(pkg, pm.getApplicationLabel(info).toString(), info.loadIcon(pm))
+            } catch (_: Exception) { null }
+        }
+        AlertDialog(
+            onDismissRequest = { showWhitelistDialog = false },
+            title = { Text("切换到白名单应用") },
+            text = {
+                if (apps.isEmpty()) {
+                    Text("暂无白名单应用，请先点击「管理白名单」添加。")
+                } else {
+                    LazyColumn {
+                        items(apps) { (pkg, label, icon) ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        showWhitelistDialog = false
+                                        activity.launchWhitelistedApp(pkg)
+                                    }
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Image(
+                                    bitmap = icon.toBitmap().asImageBitmap(),
+                                    contentDescription = label,
+                                    modifier = Modifier.size(36.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(label, style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showWhitelistDialog = false }) { Text("取消") }
+            }
+        )
+    }
+
+    // Whitelist: manage apps dialog
+    if (showAddAppDialog && activity != null) {
+        val pm = activity.packageManager
+        val installedApps = remember {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                pm.getInstalledApplications(android.content.pm.PackageManager.ApplicationInfoFlags.of(PackageManager.MATCH_ALL.toLong()))
+            } else {
+                @Suppress("DEPRECATION")
+                pm.getInstalledApplications(PackageManager.GET_META_DATA)
+            }
+                .filter { pm.getLaunchIntentForPackage(it.packageName) != null }
+                .sortedBy { pm.getApplicationLabel(it).toString() }
+                .map { it.packageName to pm.getApplicationLabel(it).toString() }
+        }
+        val whitelist = remember { mutableStateOf(activity.getWhitelistedPackages()) }
+        AlertDialog(
+            onDismissRequest = { showAddAppDialog = false },
+            title = { Text("管理白名单") },
+            text = {
+                LazyColumn {
+                    items(installedApps) { (pkg, label) ->
+                        val isAdded = pkg in whitelist.value
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(label, style = MaterialTheme.typography.bodyMedium)
+                                Text(pkg, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            IconButton(onClick = {
+                                val newSet = whitelist.value.toMutableSet()
+                                if (isAdded) newSet.remove(pkg) else newSet.add(pkg)
+                                activity.setWhitelistedPackages(newSet)
+                                whitelist.value = newSet
+                            }) {
+                                Icon(
+                                    if (isAdded) Icons.Default.Remove else Icons.Default.Add,
+                                    contentDescription = if (isAdded) "移除" else "添加",
+                                    tint = if (isAdded) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showAddAppDialog = false }) { Text("完成") }
             }
         )
     }

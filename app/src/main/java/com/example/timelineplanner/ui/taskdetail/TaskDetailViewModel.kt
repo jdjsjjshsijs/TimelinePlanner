@@ -1,9 +1,10 @@
-package com.example.timelineplanner.ui.taskdetail
+﻿package com.example.timelineplanner.ui.taskdetail
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.timelineplanner.data.repository.TaskRepository
 import com.example.timelineplanner.model.Task
+import com.example.timelineplanner.data.ai.AiOperationExecutor
 import com.example.timelineplanner.ui.theme.TaskColors
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -52,6 +53,8 @@ class TaskDetailViewModel @Inject constructor(
     val selectedColorIndex: StateFlow<Int> = _selectedColorIndex.asStateFlow()
 
     val availableColors = TaskColors
+
+    private var _colorManuallySet = false
 
     private val _notes = MutableStateFlow("")
     val notes: StateFlow<String> = _notes.asStateFlow()
@@ -244,6 +247,10 @@ class TaskDetailViewModel @Inject constructor(
         }
     }
 
+    fun clearStaleTimerState() {
+        timerStateStore.clear()
+    }
+
     fun hasPausedTimer(): Boolean = timerStateStore.hasPausedState()
 
     fun getPausedTaskId(): Long = timerStateStore.getTaskId()
@@ -294,12 +301,40 @@ class TaskDetailViewModel @Inject constructor(
         timerJob = null
     }
 
-    fun onTitleChange(value: String) { _title.value = value }
+    fun onTitleChange(value: String) {
+        _title.value = value
+        if (!_colorManuallySet && value.isNotBlank()) {
+            viewModelScope.launch {
+                val cal = java.util.Calendar.getInstance().apply { timeInMillis = currentDateMillis }
+                cal.set(java.util.Calendar.DAY_OF_MONTH, 1)
+                cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+                cal.set(java.util.Calendar.MINUTE, 0)
+                cal.set(java.util.Calendar.SECOND, 0)
+                cal.set(java.util.Calendar.MILLISECOND, 0)
+                val monthStart = cal.timeInMillis
+                cal.add(java.util.Calendar.MONTH, 1)
+                val monthEnd = cal.timeInMillis
+                val monthTasks = taskRepository.getTasksByDateRange(monthStart, monthEnd)
+                val existing = monthTasks.find { it.title.equals(value.trim(), ignoreCase = true) }
+                if (existing != null) {
+                    val idx = availableColors.indexOf(existing.color)
+                    if (idx >= 0) _selectedColorIndex.value = idx
+                } else {
+                    val usedColors = monthTasks.map { it.color }.toSet()
+                    val unusedIdx = availableColors.indexOfFirst { it !in usedColors }
+                    _selectedColorIndex.value = if (unusedIdx >= 0) unusedIdx else 0
+                }
+            }
+        }
+    }
     fun onStartHourChange(value: Int) { _startHour.value = value }
     fun onStartMinuteChange(value: Int) { _startMinute.value = value }
     fun onEndHourChange(value: Int) { _endHour.value = value }
     fun onEndMinuteChange(value: Int) { _endMinute.value = value }
-    fun onColorIndexChange(value: Int) { _selectedColorIndex.value = value }
+    fun onColorIndexChange(value: Int) {
+        _colorManuallySet = true
+        _selectedColorIndex.value = value
+    }
     fun onNotesChange(value: String) { _notes.value = value }
 
     fun save() {
