@@ -1,8 +1,9 @@
-import sqlite3
+﻿import sqlite3
 import json
 import csv
 import io
 from datetime import datetime
+import time
 from flask import Flask, request, jsonify, Response
 
 app = Flask(__name__)
@@ -23,6 +24,7 @@ def log(msg):
 def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
@@ -59,6 +61,8 @@ def init_db():
                 accuracy REAL NOT NULL,
                 date_millis INTEGER NOT NULL,
                 notes TEXT DEFAULT '',
+                created_at INTEGER DEFAULT 0,
+                updated_at TEXT DEFAULT '',
                 FOREIGN KEY(subject_id) REFERENCES practice_subjects(id) ON DELETE CASCADE
             )
         """)
@@ -77,6 +81,24 @@ def init_db():
                 end_date INTEGER NOT NULL
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS goals (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                deadline_millis INTEGER NOT NULL,
+                color TEXT DEFAULT '#E74C3C',
+                created_at INTEGER NOT NULL
+            )
+        """)
+        # Ensure columns exist for older databases
+        try:
+            conn.execute("ALTER TABLE practice_records ADD COLUMN created_at INTEGER DEFAULT 0")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE practice_records ADD COLUMN updated_at TEXT DEFAULT ''")
+        except Exception:
+            pass
         conn.commit()
 
 
@@ -85,7 +107,6 @@ init_db()
 
 @app.route("/api/tasks/sync", methods=["POST"])
 def sync_tasks():
-    """接收 Android 端全量同步的任务列表"""
     data = request.get_json()
     if not data or "tasks" not in data:
         return jsonify({"error": "missing tasks"}), 400
@@ -95,7 +116,6 @@ def sync_tasks():
 
     with get_db() as conn:
         if date_millis:
-            # 删除该日期的旧数据，用新数据替换
             conn.execute("DELETE FROM tasks WHERE date_millis = ?", (date_millis,))
 
         for t in tasks:
@@ -114,15 +134,11 @@ def sync_tasks():
         conn.commit()
 
     log(f"Tasks synced: {len(tasks)} tasks for date {date_millis}")
-    for t in tasks:
-        tid, tt, ts, te = t['id'], t['title'], t['startMinute'], t['endMinute']
-        log(f'  - [{tid}] {tt} ({ts}-{te})')
     return jsonify({"ok": True, "count": len(tasks)})
 
 
 @app.route("/api/tasks", methods=["GET"])
 def get_tasks():
-    """获取指定日期的任务"""
     date_millis = request.args.get("date", type=int)
     with get_db() as conn:
         if date_millis:
@@ -149,13 +165,11 @@ def get_tasks():
             "orderIndex": r["order_index"],
             "pauseSegments": segments
         })
-
     return jsonify({"tasks": tasks})
 
 
 @app.route("/api/tasks/all", methods=["GET"])
 def get_all_tasks():
-    """获取全部任务"""
     with get_db() as conn:
         rows = conn.execute("SELECT * FROM tasks ORDER BY date_millis, start_minute").fetchall()
 
@@ -173,78 +187,19 @@ def get_all_tasks():
             "orderIndex": r["order_index"],
             "pauseSegments": segments
         })
-
-    log(f"Fetch all tasks: {len(tasks)} found")
     return jsonify({"tasks": tasks})
 
 
 @app.route("/api/tasks/<int:task_id>", methods=["DELETE"])
 def delete_task(task_id):
-    """删除指定任务"""
     with get_db() as conn:
         conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
         conn.commit()
-    log(f'Task [{task_id}] deleted')
+    log(f"Task [{task_id}] deleted")
     return jsonify({"ok": True})
 
 
-def _get_all_tasks_flat():
-    """获取全部任务，返回扁平化的字典列表"""
-    with get_db() as conn:
-        rows = conn.execute("SELECT * FROM tasks ORDER BY date_millis, start_minute").fetchall()
-
-    result = []
-    for r in rows:
-        date_str = datetime.fromtimestamp(r["date_millis"] / 1000).strftime("%Y-%m-%d")
-        start_h, start_m = divmod(r["start_minute"], 60)
-        end_h, end_m = divmod(r["end_minute"], 60)
-        duration = r["end_minute"] - r["start_minute"]
-        segments = json.loads(r["pause_segments"]) if r["pause_segments"] else []
-        pause_total = sum(s[1] - s[0] for s in segments)
-        effective = duration - pause_total
-        result.append({
-            "日期": date_str,
-            "任务名": r["title"],
-            "开始时间": f"{start_h:02d}:{start_m:02d}",
-            "结束时间": f"{end_h:02d}:{end_m:02d}",
-            "时长(分钟)": effective,
-            "备注": r["notes"] or "",
-            "颜色": r["color"],
-        })
-    return result
-
-
-@app.route("/api/tasks/export/csv", methods=["GET"])
-def export_csv():
-    """导出全部任务为 CSV"""
-    tasks = _get_all_tasks_flat()
-    if not tasks:
-        return Response("暂无数据", status=204)
-
-    output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=tasks[0].keys())
-    writer.writeheader()
-    writer.writerows(tasks)
-
-    return Response(
-        "﻿" + output.getvalue(),
-        mimetype="text/csv",
-        headers={"Content-Disposition": "attachment; filename=tasks_export.csv"}
-    )
-
-
-@app.route("/api/tasks/export/json", methods=["GET"])
-def export_json():
-    """导出全部任务为格式化 JSON"""
-    tasks = _get_all_tasks_flat()
-    return Response(
-        json.dumps(tasks, ensure_ascii=False, indent=2),
-        mimetype="application/json",
-        headers={"Content-Disposition": "attachment; filename=tasks_export.json"}
-    )
-
-
-
+# ── Practice endpoints ───────────────────────────────────────────────
 
 @app.route("/api/practice/sync", methods=["POST"])
 def sync_practice():
@@ -253,6 +208,7 @@ def sync_practice():
         return jsonify({"error": "missing data"}), 400
     subjects = data.get("subjects", [])
     records = data.get("records", [])
+    now_iso = datetime.now().isoformat()
     with get_db() as conn:
         for s in subjects:
             conn.execute(
@@ -260,16 +216,14 @@ def sync_practice():
                 (s["id"], s["name"], s.get("color", "#4A90D9"), s["createdAt"]),
             )
         for r in records:
+            created_at = r.get("createdAtMillis", 0) or 0
             conn.execute(
-                "INSERT OR REPLACE INTO practice_records (id, subject_id, total_questions, correct_questions, accuracy, date_millis, notes) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT OR REPLACE INTO practice_records (id, subject_id, total_questions, correct_questions, accuracy, date_millis, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (r["id"], r["subjectId"], r["totalQuestions"], r["correctQuestions"],
-                 r["accuracy"], r["dateMillis"], r.get("notes", "")),
+                 r["accuracy"], r["dateMillis"], r.get("notes", ""), created_at, now_iso),
             )
         conn.commit()
     log(f"Practice synced: {len(subjects)} subjects, {len(records)} records")
-    for s in subjects:
-        sid, sn = s['id'], s['name']
-        log(f'  - Subject [{sid}] {sn}]')
     return jsonify({"ok": True, "count": len(subjects) + len(records)})
 
 
@@ -283,9 +237,31 @@ def get_all_practice():
         "subjects": [{"id": s["id"], "name": s["name"], "color": s["color"], "createdAt": s["created_at"]} for s in subjects],
         "records": [{"id": r["id"], "subjectId": r["subject_id"], "totalQuestions": r["total_questions"],
                       "correctQuestions": r["correct_questions"], "accuracy": r["accuracy"],
-                      "dateMillis": r["date_millis"], "notes": r["notes"]} for r in records],
+                      "dateMillis": r["date_millis"], "notes": r["notes"],
+                      "createdAtMillis": r["created_at"] or 0} for r in records],
     })
 
+
+@app.route("/api/practice/records/<int:record_id>", methods=["DELETE"])
+def delete_practice_record(record_id):
+    with get_db() as conn:
+        conn.execute("DELETE FROM practice_records WHERE id = ?", (record_id,))
+        conn.commit()
+    log(f"Practice record [{record_id}] deleted")
+    return jsonify({"ok": True})
+
+
+@app.route("/api/practice/subjects/<int:subject_id>", methods=["DELETE"])
+def delete_practice_subject(subject_id):
+    with get_db() as conn:
+        conn.execute("DELETE FROM practice_records WHERE subject_id = ?", (subject_id,))
+        conn.execute("DELETE FROM practice_subjects WHERE id = ?", (subject_id,))
+        conn.commit()
+    log(f"Practice subject [{subject_id}] deleted")
+    return jsonify({"ok": True})
+
+
+# ── Course endpoints ─────────────────────────────────────────────────
 
 @app.route("/api/courses/sync", methods=["POST"])
 def sync_courses():
@@ -304,11 +280,6 @@ def sync_courses():
             )
         conn.commit()
     log(f"Courses synced: {len(courses)} courses")
-    for cr in courses:
-        cid, ct = cr['id'], cr['title']
-        cd = cr.get('daysOfWeek', '?')
-        cs, ce = cr.get('startMinute', 0), cr.get('endMinute', 0)
-        log(f'  - [{cid}] {ct} days={cd} {cs//60}:{cs%60:02d}-{ce//60}:{ce%60:02d}')
     return jsonify({"ok": True, "count": len(courses)})
 
 
@@ -330,6 +301,66 @@ def get_all_courses():
     return jsonify({"courses": courses})
 
 
+@app.route("/api/courses/<int:course_id>", methods=["DELETE"])
+def delete_course(course_id):
+    with get_db() as conn:
+        conn.execute("DELETE FROM courses WHERE id = ?", (course_id,))
+        conn.commit()
+    log(f"Course [{course_id}] deleted")
+    return jsonify({"ok": True})
+
+# ── Goal endpoints ───────────────────────────────────────────────────
+
+@app.route("/api/goals/sync", methods=["POST"])
+def sync_goals():
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "missing data"}), 400
+    goals = data if isinstance(data, list) else data.get("goals", [])
+    with get_db() as conn:
+        for g in goals:
+            conn.execute(
+                "INSERT OR REPLACE INTO goals (id, name, deadline_millis, color, created_at) VALUES (?, ?, ?, ?, ?)",
+                (g["id"], g["name"], g["deadlineMillis"], g.get("color", "#E74C3C"), g["createdAt"]),
+            )
+        conn.commit()
+    log(f"Goals synced: {len(goals)} goals")
+    return jsonify({"ok": True, "count": len(goals)})
+
+
+@app.route("/api/goals/all", methods=["GET"])
+def get_all_goals():
+    with get_db() as conn:
+        rows = conn.execute("SELECT * FROM goals").fetchall()
+    goals = []
+    for r in rows:
+        goals.append({
+            "id": r["id"], "name": r["name"],
+            "deadlineMillis": r["deadline_millis"],
+            "color": r["color"], "createdAt": r["created_at"],
+        })
+    log(f"Fetch goals: {len(goals)} found")
+    return jsonify({"goals": goals})
+
+
+
+@app.route("/api/goals/<int:goal_id>", methods=["DELETE"])
+def delete_goal(goal_id):
+    with get_db() as conn:
+        conn.execute("DELETE FROM goals WHERE id = ?", (goal_id,))
+        conn.commit()
+    log(f"Goal [{goal_id}] deleted")
+    return jsonify({"ok": True})
+
+@app.route("/api/ping", methods=["GET"])
+def ping():
+    return jsonify({"ok": True, "timestamp": int(time.time() * 1000)})
+
+
 if __name__ == "__main__":
     print("TimelinePlanner sync server running on 0.0.0.0:5000")
     app.run(host="0.0.0.0", port=5000, debug=False)
+
+
+
+

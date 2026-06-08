@@ -158,9 +158,10 @@ class TaskDetailViewModel @Inject constructor(
         val currentElapsed = pausedElapsedMillis +
             if (_timerState.value == TimerState.RUNNING) System.currentTimeMillis() - timerStartMillis else 0L
         val totalSeconds = currentElapsed / 1000
-        val minutes = totalSeconds / 60
+            val hours = totalSeconds / 3600
+            val minutes = (totalSeconds % 3600) / 60
         val seconds = totalSeconds % 60
-        _elapsedDisplay.value = String.format("%02d:%02d", minutes, seconds)
+        _elapsedDisplay.value = String.format("%02d:%02d:%02d", hours, minutes, seconds)
     }
 
     fun requestEndTimer() {
@@ -222,7 +223,7 @@ class TaskDetailViewModel @Inject constructor(
             return
         }
         _timerState.value = TimerState.IDLE
-        _elapsedDisplay.value = "00:00"
+        _elapsedDisplay.value = "00:00:00"
         _pauseSegments.value = emptyList()
         _endConfirmVisible.value = false
         pausedElapsedMillis = 0L
@@ -293,9 +294,10 @@ class TaskDetailViewModel @Inject constructor(
         _notes.value = ""
         _selectedColorIndex.value = 0
         _timerState.value = TimerState.IDLE
-        _elapsedDisplay.value = "00:00"
+        _elapsedDisplay.value = "00:00:00"
         _pauseSegments.value = emptyList()
         _endConfirmVisible.value = false
+        _colorManuallySet = false
         pausedElapsedMillis = 0L
         timerJob?.cancel()
         timerJob = null

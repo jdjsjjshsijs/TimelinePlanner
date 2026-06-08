@@ -1,4 +1,4 @@
-package com.example.timelineplanner.ui.timeline
+﻿package com.example.timelineplanner.ui.timeline
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
@@ -18,9 +18,9 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.example.timelineplanner.ui.theme.TimelineGridLine
-import com.example.timelineplanner.ui.theme.TimelineHourLine
-import com.example.timelineplanner.ui.theme.TimelineHourText
+import com.example.timelineplanner.ui.theme.timelineGridLineColor
+import com.example.timelineplanner.ui.theme.timelineHourLineColor
+import com.example.timelineplanner.ui.theme.timelineHourTextColor
 
 const val BASE_HOUR_HEIGHT_DP = 80f
 const val MINUTES_IN_DAY = 24 * 60
@@ -32,6 +32,7 @@ fun TimeLabels(
     hourHeightDp: Float,
     modifier: Modifier = Modifier
 ) {
+    val hourTextColor = timelineHourTextColor()
     Column(modifier = modifier) {
         for (hour in TIMELINE_START_HOUR..23) {
             Box(
@@ -44,7 +45,7 @@ fun TimeLabels(
                 Text(
                     text = String.format("%02d:00", hour),
                     style = MaterialTheme.typography.labelSmall,
-                    color = TimelineHourText,
+                    color = hourTextColor,
                     textAlign = TextAlign.End
                 )
             }
@@ -62,13 +63,15 @@ fun TimeGrid(
     val startMinute = TIMELINE_START_HOUR * 60
     val totalMinutes = MINUTES_IN_DAY
     val visibleMinutes = totalMinutes - startMinute
+    val gridLineColor = timelineGridLineColor()
+    val hourLineColor = timelineHourLineColor()
 
     Canvas(modifier = modifier.fillMaxWidth().height((visibleMinutes * hourHeightDp / 60f).dp)) {
         for (minute in startMinute..totalMinutes step 15) {
             val y = (minute - startMinute) * minuteH
             val isHour = minute % 60 == 0
             drawLine(
-                color = if (isHour) TimelineHourLine else TimelineGridLine,
+                color = if (isHour) hourLineColor else gridLineColor,
                 start = Offset(0f, y),
                 end = Offset(size.width, y),
                 strokeWidth = if (isHour) 2f else 1f,

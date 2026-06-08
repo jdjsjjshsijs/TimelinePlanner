@@ -1,4 +1,4 @@
-﻿package com.example.timelineplanner.ui.taskdetail
+package com.example.timelineplanner.ui.taskdetail
 
 import android.content.Intent
 import android.provider.Settings
@@ -68,7 +68,8 @@ import com.example.timelineplanner.ui.timeline.parseColor
 fun TaskDetailSheet(
     viewModel: TaskDetailViewModel,
     taskId: Long?,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    allowDismissDuringTimer: Boolean = false
 ) {
     val title by viewModel.title.collectAsState()
     val startHour by viewModel.startHour.collectAsState()
@@ -114,7 +115,7 @@ fun TaskDetailSheet(
 
     // 拦截返回键
     BackHandler {
-        if (isKioskActive) {
+        if (isKioskActive && !allowDismissDuringTimer) {
             // kiosk 模式下什么都不做
         } else {
             onDismiss()
@@ -122,6 +123,8 @@ fun TaskDetailSheet(
     }
 
     LaunchedEffect(taskId) {
+        // Skip loadTask if timer is already active (e.g., reopened from mini timer)
+        if (timerState != TimerState.IDLE && timerState != TimerState.ENDED) return@LaunchedEffect
         if (taskId != null && taskId > 0) {
             viewModel.loadTask(taskId)
         } else {
@@ -330,7 +333,7 @@ fun TaskDetailSheet(
     }
 
     // kiosk 模式：全屏不可关闭的布局
-    if (isKioskActive) {
+    if (isKioskActive && !allowDismissDuringTimer) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -517,3 +520,4 @@ fun TaskDetailSheet(
         )
     }
 }
+

@@ -106,6 +106,17 @@ fun BoxScope.TaskBar(
                     color = Color.White.copy(alpha = 0.85f),
                     maxLines = 1
                 )
+                if (task.pauseSegments.isNotEmpty()) {
+                    val pauseMinutes = task.pauseSegments.sumOf { it.second - it.first }
+                    val plannedMinutes = task.endMinute - task.startMinute
+                    val actualMinutes = (plannedMinutes - pauseMinutes).coerceAtLeast(1)
+                    Text(
+                        text = "实际 ${actualMinutes}分钟",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.7f),
+                        maxLines = 1
+                    )
+                }
             }
         }
 

@@ -1,4 +1,4 @@
-package com.example.timelineplanner.ui.practice
+﻿package com.example.timelineplanner.ui.practice
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -22,6 +23,8 @@ class PracticeViewModel @Inject constructor(
     private val practiceRepository: PracticeRepository,
     private val syncRepository: SyncRepository
 ) : ViewModel() {
+
+    private var recordsJob: Job? = null
 
     val subjects: StateFlow<List<PracticeSubject>> = practiceRepository.getAllSubjects()
         .let { flow ->
@@ -48,8 +51,9 @@ class PracticeViewModel @Inject constructor(
 
     fun selectSubject(subject: PracticeSubject?) {
         _selectedSubject.value = subject
+        recordsJob?.cancel()
         if (subject != null) {
-            viewModelScope.launch {
+            recordsJob = viewModelScope.launch {
                 practiceRepository.getRecordsBySubject(subject.id).collect {
                     _records.value = it
                 }
@@ -101,7 +105,8 @@ class PracticeViewModel @Inject constructor(
                     correctQuestions = correctQuestions,
                     accuracy = accuracy,
                     dateMillis = todayStartMillis(),
-                    notes = notes.trim()
+                    notes = notes.trim(),
+                    createdAtMillis = System.currentTimeMillis()
                 )
             )
             _showAddRecordDialog.value = false
@@ -116,6 +121,8 @@ class PracticeViewModel @Inject constructor(
                 _selectedSubject.value = null
                 _records.value = emptyList()
             }
+            // Also delete on server so it won't come back on restore
+            syncRepository.deletePracticeSubject(subject.id)
             syncRepository.syncPractice()
         }
     }
@@ -123,7 +130,10 @@ class PracticeViewModel @Inject constructor(
     fun deleteRecord(record: PracticeRecord) {
         viewModelScope.launch {
             practiceRepository.deleteRecordById(record.id)
+            // Also delete on server so it won't come back on restore
+            syncRepository.deletePracticeRecord(record.id)
             syncRepository.syncPractice()
         }
     }
 }
+

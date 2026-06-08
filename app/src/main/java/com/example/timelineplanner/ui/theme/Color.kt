@@ -1,5 +1,7 @@
-package com.example.timelineplanner.ui.theme
+﻿package com.example.timelineplanner.ui.theme
 
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 // 预设任务颜色调色板（柔和色）
@@ -44,8 +46,61 @@ val md_theme_dark_surfaceVariant = Color(0xFF43474E)
 val md_theme_dark_onSurfaceVariant = Color(0xFFC3C7CF)
 val md_theme_dark_error = Color(0xFFFFB4AB)
 
-// 时间轴特定颜色
-val TimelineGridLine = Color(0xFFE0E0E0)
-val TimelineHourLine = Color(0xFFBDBDBD)
-val TimelineHourText = Color(0xFF757575)
+// 时间轴特定颜色（跟随主题）
+val TimelineGridLineLight = Color(0xFFE0E0E0)
+val TimelineGridLineDark = Color(0xFF3A3A3A)
+val TimelineHourLineLight = Color(0xFFBDBDBD)
+val TimelineHourLineDark = Color(0xFF555555)
+val TimelineHourTextLight = Color(0xFF757575)
+val TimelineHourTextDark = Color(0xFF9E9E9E)
 val TimelineCurrentTimeLine = Color(0xFFE53935)
+
+// Task bar 文字颜色（task bar 背景是用户选的颜色，文字始终白色即可）
+val TaskBarTextColor = Color.White
+
+// 同步成功颜色
+val SyncSuccessLight = Color(0xFF2E7D32)
+val SyncSuccessDark = Color(0xFF81C784)
+val SyncSuccessBgLight = Color(0xFFE8F5E9)
+val SyncSuccessBgDark = Color(0xFF1B3A1E)
+
+// 练习准确率颜色（深色模式下用更亮的色调保证可见性）
+val AccuracyHighLight = Color(0xFF2ECC71)
+val AccuracyHighDark = Color(0xFF66BB6A)
+val AccuracyMidLight = Color(0xFFF39C12)
+val AccuracyMidDark = Color(0xFFFFB74D)
+val AccuracyLowLight = Color(0xFFE74C3C)
+val AccuracyLowDark = Color(0xFFEF5350)
+
+// 练习图表中的白色点和淡色背景
+val ChartDotColor = Color.White
+val ChartDotBgLight = Color.White.copy(alpha = 0.3f)
+val ChartDotBgDark = Color(0xFFE3E2E6).copy(alpha = 0.3f)
+
+// 提供 Composable 辅助函数，根据当前深色模式返回正确的颜色
+@Composable
+fun timelineGridLineColor(): Color = if (isSystemInDarkTheme()) TimelineGridLineDark else TimelineGridLineLight
+
+@Composable
+fun timelineHourLineColor(): Color = if (isSystemInDarkTheme()) TimelineHourLineDark else TimelineHourLineLight
+
+@Composable
+fun timelineHourTextColor(): Color = if (isSystemInDarkTheme()) TimelineHourTextDark else TimelineHourTextLight
+
+@Composable
+fun syncSuccessColor(): Color = if (isSystemInDarkTheme()) SyncSuccessDark else SyncSuccessLight
+
+@Composable
+fun syncSuccessBgColor(): Color = if (isSystemInDarkTheme()) SyncSuccessBgDark else SyncSuccessBgLight
+
+@Composable
+fun accuracyHighColor(): Color = if (isSystemInDarkTheme()) AccuracyHighDark else AccuracyHighLight
+
+@Composable
+fun accuracyMidColor(): Color = if (isSystemInDarkTheme()) AccuracyMidDark else AccuracyMidLight
+
+@Composable
+fun accuracyLowColor(): Color = if (isSystemInDarkTheme()) AccuracyLowDark else AccuracyLowLight
+
+@Composable
+fun chartDotBgColor(): Color = if (isSystemInDarkTheme()) ChartDotBgDark else ChartDotBgLight

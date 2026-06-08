@@ -8,12 +8,14 @@ import androidx.security.crypto.MasterKey
 import com.example.timelineplanner.data.db.AppDatabase
 import com.example.timelineplanner.data.db.ChatMessageDao
 import com.example.timelineplanner.data.db.CourseDao
+import com.example.timelineplanner.data.db.GoalDao
 import com.example.timelineplanner.data.db.PracticeDao
 import com.example.timelineplanner.data.db.TaskDao
 import com.example.timelineplanner.data.remote.SyncApi
 import com.example.timelineplanner.data.remote.SyncClient
 import com.example.timelineplanner.data.repository.AiTaskRepository
 import com.example.timelineplanner.data.repository.CourseRepository
+import com.example.timelineplanner.data.repository.GoalRepository
 import com.example.timelineplanner.data.repository.PracticeRepository
 import com.example.timelineplanner.data.repository.TaskRepository
 import dagger.Module
@@ -36,7 +38,8 @@ object AppModule {
             AppDatabase::class.java,
             "timeline_planner.db"
         )
-            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5)
+            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
+            .fallbackToDestructiveMigrationOnDowngrade()
             .build()
     }
 
@@ -66,6 +69,12 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun provideGoalDao(database: AppDatabase): GoalDao {
+        return database.goalDao()
+    }
+
+    @Provides
+    @Singleton
     fun provideCourseRepository(courseDao: CourseDao, syncApi: SyncApi): CourseRepository {
         val repo = CourseRepository(courseDao)
         repo.setSyncApi(syncApi)
@@ -80,38 +89,52 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun provideGoalRepository(goalDao: GoalDao): GoalRepository {
+        return GoalRepository(goalDao)
+    }
+
+    @Provides
+    @Singleton
     fun provideAiSettingsPrefs(@ApplicationContext context: Context): SharedPreferences {
-        val masterKey = MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
+        // Use plain SharedPreferences so settings survive uninstall/reinstall
+        val prefs = context.getSharedPreferences("ai_settings", Context.MODE_PRIVATE)
 
-        val encryptedPrefs = EncryptedSharedPreferences.create(
-            context,
-            "ai_settings_encrypted",
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
-
-        // Migrate from old plain SharedPreferences if needed
-        val oldPrefs = context.getSharedPreferences("ai_settings", Context.MODE_PRIVATE)
-        if (oldPrefs.contains("api_key") && !encryptedPrefs.contains("api_key")) {
-            encryptedPrefs.edit().apply {
-                oldPrefs.all.forEach { (key, value) ->
-                    when (value) {
-                        is String -> putString(key, value)
-                        is Boolean -> putBoolean(key, value)
-                        is Int -> putInt(key, value)
-                        is Long -> putLong(key, value)
-                        is Float -> putFloat(key, value)
+        // One-time migration from old EncryptedSharedPreferences if needed
+        if (!prefs.contains("migrated_from_encrypted")) {
+            try {
+                val masterKey = MasterKey.Builder(context)
+                    .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                    .build()
+                val enc = EncryptedSharedPreferences.create(
+                    context,
+                    "ai_settings_encrypted",
+                    masterKey,
+                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+                )
+                if (enc.contains("api_key")) {
+                    prefs.edit().apply {
+                        enc.all.forEach { (key, value) ->
+                            when (value) {
+                                is String -> putString(key, value)
+                                is Boolean -> putBoolean(key, value)
+                                is Int -> putInt(key, value)
+                                is Long -> putLong(key, value)
+                                is Float -> putFloat(key, value)
+                            }
+                        }
+                        putBoolean("migrated_from_encrypted", true)
+                        apply()
                     }
+                } else {
+                    prefs.edit().putBoolean("migrated_from_encrypted", true).apply()
                 }
-                apply()
+            } catch (_: Exception) {
+                prefs.edit().putBoolean("migrated_from_encrypted", true).apply()
             }
-            oldPrefs.edit().clear().apply()
         }
 
-        return encryptedPrefs
+        return prefs
     }
 
     @Provides
@@ -140,5 +163,12 @@ object AppModule {
     @Named("kiosk_prefs")
     fun provideKioskPrefs(@ApplicationContext context: Context): SharedPreferences {
         return context.getSharedPreferences("kiosk_prefs", Context.MODE_PRIVATE)
+    }
+
+    @Provides
+    @Singleton
+    @Named("theme_prefs")
+    fun provideThemePrefs(@ApplicationContext context: Context): SharedPreferences {
+        return context.getSharedPreferences("theme_prefs", Context.MODE_PRIVATE)
     }
 }

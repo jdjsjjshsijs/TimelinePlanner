@@ -27,6 +27,24 @@ class TimerStateStore @Inject constructor(
             putInt("pause_start_minute", pauseStartMinute)
             putInt("start_minute", startMinute)
             putLong("pause_wall_millis", System.currentTimeMillis())
+            putBoolean("was_running", false)
+            apply()
+        }
+    }
+
+    fun saveRunningState(
+        taskId: Long,
+        elapsedMillis: Long,
+        pauseSegments: List<Pair<Int, Int>>,
+        startMinute: Int
+    ) {
+        prefs.edit().apply {
+            putLong("task_id", taskId)
+            putLong("elapsed_millis", elapsedMillis)
+            putString("pause_segments", serializeSegments(pauseSegments))
+            putInt("start_minute", startMinute)
+            putLong("pause_wall_millis", System.currentTimeMillis())
+            putBoolean("was_running", true)
             apply()
         }
     }
@@ -37,14 +55,16 @@ class TimerStateStore @Inject constructor(
 
     fun hasPausedState(): Boolean {
         if (!prefs.contains("task_id")) return false
-        val pauseWallMillis = prefs.getLong("pause_wall_millis", 0L)
+        val wallMillis = prefs.getLong("pause_wall_millis", 0L)
         val oneHourAgo = System.currentTimeMillis() - 60 * 60 * 1000L
-        if (pauseWallMillis < oneHourAgo) {
+        if (wallMillis < oneHourAgo) {
             clear()
             return false
         }
         return true
     }
+
+    fun wasRunning(): Boolean = prefs.getBoolean("was_running", false)
 
     fun getTaskId(): Long = prefs.getLong("task_id", -1)
 
@@ -57,20 +77,20 @@ class TimerStateStore @Inject constructor(
         val startMinute = prefs.getInt("start_minute", 0)
         val pauseWallMillis = prefs.getLong("pause_wall_millis", System.currentTimeMillis())
 
-        // app 关闭期间计时器处于暂停状态，elapsed 不增长
-        // 暂停记录不在此处生成，等用户结束/继续时由 ViewModel 正确处理
+        // app close period: timer was paused or running, elapsed depends on was_running
+        // If was_running, calculate extra elapsed from wall time difference
+        val wasRunning = prefs.getBoolean("was_running", false)
+        val extraElapsed = if (wasRunning) {
+            (System.currentTimeMillis() - pauseWallMillis).coerceAtLeast(0)
+        } else 0L
 
         return RestoredTimerState(
             taskId = taskId,
-            elapsedMillis = elapsedMillis,
+            elapsedMillis = elapsedMillis + extraElapsed,
             pauseSegments = segments,
-            startMinute = startMinute
+            startMinute = startMinute,
+            wasRunning = wasRunning
         )
-    }
-
-    private fun getCurrentMinuteOfDay(): Int {
-        val cal = java.util.Calendar.getInstance()
-        return cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
     }
 
     private fun serializeSegments(segments: List<Pair<Int, Int>>): String {
@@ -92,5 +112,6 @@ data class RestoredTimerState(
     val taskId: Long,
     val elapsedMillis: Long,
     val pauseSegments: List<Pair<Int, Int>>,
-    val startMinute: Int
+    val startMinute: Int,
+    val wasRunning: Boolean = false
 )

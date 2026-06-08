@@ -11,10 +11,11 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.collectAsState
 import com.example.timelineplanner.ui.navigation.AppNavigation
 import com.example.timelineplanner.ui.theme.TimelinePlannerTheme
+import com.example.timelineplanner.util.ThemePreferences
 import dagger.hilt.android.AndroidEntryPoint
-import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Named
 
@@ -28,6 +29,7 @@ class MainActivity : ComponentActivity() {
         private set
 
     @Inject @Named("kiosk_prefs") lateinit var kioskPrefs: SharedPreferences
+    @Inject lateinit var themePreferences: ThemePreferences
 
     fun getWhitelistedPackages(): Set<String> {
         return kioskPrefs.getStringSet("kiosk_whitelist", emptySet()) ?: emptySet()
@@ -50,10 +52,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 在 setContent 之前应用已保存的主题，避免闪烁
+        themePreferences.applySavedTheme()
         enableEdgeToEdge()
         setContent {
-            TimelinePlannerTheme {
-                AppNavigation()
+            val themeMode = themePreferences.themeMode.collectAsState().value
+            TimelinePlannerTheme(themeMode = themeMode) {
+                AppNavigation(themePreferences = themePreferences)
             }
         }
     }

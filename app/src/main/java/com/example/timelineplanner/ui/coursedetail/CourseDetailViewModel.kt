@@ -1,4 +1,4 @@
-package com.example.timelineplanner.ui.coursedetail
+﻿package com.example.timelineplanner.ui.coursedetail
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -183,6 +183,7 @@ class CourseDetailViewModel @Inject constructor(
         val existingId = _editingCourseId.value ?: return
         viewModelScope.launch {
             courseRepository.deleteCourseById(existingId)
+            try { syncRepository.deleteCourse(existingId); Log.d("CourseVM", "deleteCourse called") } catch (e: Exception) { Log.e("CourseVM", "deleteCourse failed", e) }
             try { syncRepository.syncCourses(); Log.d("CourseVM", "syncCourses called") } catch (e: Exception) { Log.e("CourseVM", "syncCourses failed", e) }
             _dismissEvent.emit(Unit)
         }
@@ -205,3 +206,4 @@ class CourseDetailViewModel @Inject constructor(
         _selectedDays.value = if (day in current) current - day else current + day
     }
 }
+

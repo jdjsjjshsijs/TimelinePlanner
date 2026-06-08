@@ -1,4 +1,4 @@
-package com.example.timelineplanner.ui.taskdetail
+﻿package com.example.timelineplanner.ui.taskdetail
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -46,6 +47,36 @@ fun TimerPanel(
     onSave: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Track pause start time for real-time pause duration display
+    var pauseStartWallMillis by remember { mutableLongStateOf(0L) }
+    var pauseDurationDisplay by remember { mutableStateOf("") }
+
+    // When state transitions to PAUSED, record the wall-clock time
+    LaunchedEffect(timerState) {
+        if (timerState == TimerState.PAUSED) {
+            pauseStartWallMillis = System.currentTimeMillis()
+        }
+    }
+
+    // Update pause duration display every second while paused
+    LaunchedEffect(timerState, pauseStartWallMillis) {
+        if (timerState == TimerState.PAUSED && pauseStartWallMillis > 0) {
+            while (true) {
+                val elapsed = System.currentTimeMillis() - pauseStartWallMillis
+                val totalSec = (elapsed / 1000).toInt()
+                val hours = totalSec / 3600
+                val minutes = (totalSec % 3600) / 60
+                val seconds = totalSec % 60
+                pauseDurationDisplay = if (hours > 0) {
+                    String.format("已暂停 %d:%02d:%02d", hours, minutes, seconds)
+                } else {
+                    String.format("已暂停 %02d:%02d", minutes, seconds)
+                }
+                delay(1000)
+            }
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -95,6 +126,18 @@ fun TimerPanel(
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+
+        // Real-time pause duration display
+        if (timerState == TimerState.PAUSED && pauseDurationDisplay.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = pauseDurationDisplay,
+                style = MaterialTheme.typography.titleMedium,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
 
         if (pauseSegments.isNotEmpty()) {
             Spacer(modifier = Modifier.height(8.dp))

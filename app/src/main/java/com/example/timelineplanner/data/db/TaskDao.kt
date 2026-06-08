@@ -1,4 +1,4 @@
-package com.example.timelineplanner.data.db
+﻿package com.example.timelineplanner.data.db
 
 import androidx.room.Dao
 import androidx.room.Delete
@@ -39,6 +39,9 @@ interface TaskDao {
 
     @Query("DELETE FROM tasks WHERE id IN (:ids)")
     suspend fun deleteTasksByIds(ids: List<Long>)
+
+    @Query("SELECT * FROM tasks ORDER BY dateMillis ASC, startMinute ASC")
+    suspend fun getAllTasksOnce(): List<TaskEntity>
 
     @Query("SELECT * FROM tasks WHERE dateMillis >= :startMillis AND dateMillis < :endMillis ORDER BY dateMillis ASC, startMinute ASC")
     suspend fun getTasksByDateRange(startMillis: Long, endMillis: Long): List<TaskEntity>

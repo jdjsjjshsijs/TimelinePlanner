@@ -1,4 +1,4 @@
-package com.example.timelineplanner.ui.timeline
+﻿package com.example.timelineplanner.ui.timeline
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -34,7 +34,7 @@ class TimelineViewModel @Inject constructor(
     private val syncRepository: SyncRepository
 ) : ViewModel() {
 
-    private val todayStart: Long by lazy { todayStartMillis() }
+    private val todayStart: Long get() = todayStartMillis()
 
     private val _selectedDate = MutableStateFlow(todayStart)
     val selectedDate: StateFlow<Long> = _selectedDate.asStateFlow()
@@ -47,6 +47,7 @@ class TimelineViewModel @Inject constructor(
 
     val isSelectionMode: Boolean get() = _selectedTaskIds.value.isNotEmpty()
     val isSyncing: StateFlow<Boolean> = syncRepository.isSyncing
+    val lastSyncResult = syncRepository.lastSyncResult
 
     private val _canUndo = MutableStateFlow(false)
     val canUndo: StateFlow<Boolean> = _canUndo.asStateFlow()
@@ -180,3 +181,4 @@ class TimelineViewModel @Inject constructor(
         }
     }
 }
+

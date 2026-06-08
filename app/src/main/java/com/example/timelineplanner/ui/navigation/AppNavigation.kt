@@ -1,4 +1,4 @@
-﻿package com.example.timelineplanner.ui.navigation
+package com.example.timelineplanner.ui.navigation
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,6 +33,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import kotlinx.coroutines.flow.MutableStateFlow
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -60,6 +61,21 @@ import com.example.timelineplanner.ui.timeline.TimelineScreen
 import com.example.timelineplanner.ui.timeline.TimelineViewModel
 import com.example.timelineplanner.ui.timetable.TimetableScreen
 import com.example.timelineplanner.ui.timetable.TimetableViewModel
+import com.example.timelineplanner.ui.export.ExportViewModel
+import com.example.timelineplanner.ui.goal.GoalScreen
+import com.example.timelineplanner.ui.goal.GoalViewModel
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Palette
+import com.example.timelineplanner.ui.navigation.PingViewModel
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.RadioButton
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Row
 
 data class BottomNavItem(
     val label: String,
@@ -75,9 +91,16 @@ fun AppNavigation(
     summaryViewModel: DailySummaryViewModel = hiltViewModel(),
     courseDetailViewModel: CourseDetailViewModel = hiltViewModel(),
     practiceViewModel: PracticeViewModel = hiltViewModel(),
-    timetableViewModel: TimetableViewModel = hiltViewModel()
+    timetableViewModel: TimetableViewModel = hiltViewModel(),
+    themePreferences: com.example.timelineplanner.util.ThemePreferences? = null,
+    pingViewModel: PingViewModel = hiltViewModel(),
+    exportViewModel: ExportViewModel = hiltViewModel(),
+    goalViewModel: GoalViewModel = hiltViewModel(),
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
+    var showThemeDialog by remember { mutableStateOf(false) }
+    val isExporting by exportViewModel.isExporting.collectAsState()
+    val exportResult by exportViewModel.exportResult.collectAsState()
     var editingTaskId by remember { mutableStateOf<Long?>(null) }
     var showTaskSheet by remember { mutableStateOf(false) }
     var editingCourseId by remember { mutableStateOf<Long?>(null) }
@@ -116,33 +139,37 @@ fun AppNavigation(
         BottomNavItem("日程", Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth),
         BottomNavItem("总结", Icons.Filled.Analytics, Icons.Outlined.Analytics),
         BottomNavItem("刷题", Icons.Filled.Quiz, Icons.Outlined.Quiz),
-        BottomNavItem("AI 助手", Icons.Filled.Chat, Icons.Outlined.Chat)
+        BottomNavItem("AI 助手", Icons.Filled.Chat, Icons.Outlined.Chat),
+        BottomNavItem("目标", Icons.Filled.Flag, Icons.Outlined.Flag)
     )
 
     Scaffold(
         bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 2.dp
-            ) {
-                tabs.forEachIndexed { index, item ->
-                    NavigationBarItem(
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index },
-                        icon = {
-                            Icon(
-                                imageVector = if (selectedTab == index)
-                                    item.selectedIcon else item.unselectedIcon,
-                                contentDescription = item.label
+            Column {
+                LatencyStatusBar(pingViewModel = pingViewModel)
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 2.dp
+                ) {
+                    tabs.forEachIndexed { index, item ->
+                        NavigationBarItem(
+                            selected = selectedTab == index,
+                            onClick = { selectedTab = index },
+                            icon = {
+                                Icon(
+                                    imageVector = if (selectedTab == index)
+                                        item.selectedIcon else item.unselectedIcon,
+                                    contentDescription = item.label
+                                )
+                            },
+                            label = { Text(item.label) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                indicatorColor = MaterialTheme.colorScheme.primaryContainer
                             )
-                        },
-                        label = { Text(item.label) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.primary,
-                            indicatorColor = MaterialTheme.colorScheme.primaryContainer
                         )
-                    )
+                    }
                 }
             }
         }
@@ -205,6 +232,22 @@ fun AppNavigation(
                             },
                             leadingIcon = { Icon(Icons.Default.CloudDownload, contentDescription = null) }
                         )
+                        DropdownMenuItem(
+                            text = { Text("导出数据") },
+                            onClick = {
+                                fabMenuExpanded = false
+                                exportViewModel.export()
+                            },
+                            leadingIcon = { Icon(Icons.Default.Analytics, contentDescription = null) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("主题设置") },
+                            onClick = {
+                                fabMenuExpanded = false
+                                showThemeDialog = true
+                            },
+                            leadingIcon = { Icon(Icons.Filled.Quiz, contentDescription = null) }
+                        )
                         if (canUndo) {
                             DropdownMenuItem(
                                 text = { Text("撤销") },
@@ -235,6 +278,10 @@ fun AppNavigation(
             )
             3 -> AiChatScreen(
                 viewModel = aiChatViewModel,
+                modifier = Modifier.padding(paddingValues)
+            )
+            4 -> GoalScreen(
+                viewModel = goalViewModel,
                 modifier = Modifier.padding(paddingValues)
             )
         }
@@ -297,6 +344,100 @@ fun AppNavigation(
             dismissButton = {
                 TextButton(onClick = { showRestoreDialog = false }) { Text("取消") }
             }
+        )
+    }
+
+    // Theme dialog
+    val fallbackThemeFlow = remember { MutableStateFlow(com.example.timelineplanner.util.ThemeMode.SYSTEM) }
+    val currentThemeMode by (themePreferences?.themeMode ?: fallbackThemeFlow).collectAsState()
+    if (showThemeDialog) {
+        var selectedMode by remember { mutableStateOf(currentThemeMode) }
+        LaunchedEffect(showThemeDialog) { selectedMode = currentThemeMode }
+        AlertDialog(
+            onDismissRequest = { showThemeDialog = false },
+            title = { Text("主题设置") },
+            text = {
+                Column {
+                    com.example.timelineplanner.util.ThemeMode.values().forEach { mode ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { selectedMode = mode }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = selectedMode == mode,
+                                onClick = { selectedMode = mode }
+                            )
+                            Text(
+                                text = when (mode) {
+                                    com.example.timelineplanner.util.ThemeMode.SYSTEM -> "跟随系统"
+                                    com.example.timelineplanner.util.ThemeMode.LIGHT -> "亮色模式"
+                                    com.example.timelineplanner.util.ThemeMode.DARK -> "暗色模式"
+                                },
+                                modifier = Modifier.padding(start = 8.dp)
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    themePreferences?.setThemeMode(selectedMode)
+                    showThemeDialog = false
+                }) { Text("确定") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showThemeDialog = false }) { Text("取消") }
+            }
+        )
+    }
+
+    // Export result dialog
+    if (exportResult != null) {
+        AlertDialog(
+            onDismissRequest = { exportViewModel.clearResult() },
+            title = { Text("导出结果") },
+            text = { Text(exportResult ?: "") },
+            confirmButton = {
+                TextButton(onClick = { exportViewModel.clearResult() }) { Text("确定") }
+            }
+        )
+    }
+}
+@Composable
+private fun LatencyStatusBar(pingViewModel: PingViewModel) {
+    val latencyMs by pingViewModel.latencyMs.collectAsState()
+
+    val backgroundColor = when {
+        latencyMs == null -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+        latencyMs!! < 200 -> Color(0xFF4CAF50).copy(alpha = 0.1f)
+        latencyMs!! < 500 -> Color(0xFFFF9800).copy(alpha = 0.1f)
+        else -> Color(0xFFF44336).copy(alpha = 0.1f)
+    }
+    val textColor = when {
+        latencyMs == null -> MaterialTheme.colorScheme.onErrorContainer
+        latencyMs!! < 200 -> Color(0xFF4CAF50)
+        latencyMs!! < 500 -> Color(0xFFFF9800)
+        else -> Color(0xFFF44336)
+    }
+    val statusText = when {
+        latencyMs == null -> "服务器离线"
+        else -> "延迟: ${latencyMs}ms"
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(backgroundColor)
+            .padding(horizontal = 16.dp, vertical = 2.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = statusText,
+            style = MaterialTheme.typography.labelSmall,
+            color = textColor
         )
     }
 }

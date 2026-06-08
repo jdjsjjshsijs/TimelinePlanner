@@ -1,4 +1,4 @@
-package com.example.timelineplanner.data.db
+﻿package com.example.timelineplanner.data.db
 
 import androidx.room.Entity
 import androidx.room.ForeignKey
@@ -25,5 +25,6 @@ data class PracticeRecordEntity(
     val correctQuestions: Int,
     val accuracy: Float,
     val dateMillis: Long,
-    val notes: String = ""
+    val notes: String = "",
+    val createdAtMillis: Long = System.currentTimeMillis()
 )

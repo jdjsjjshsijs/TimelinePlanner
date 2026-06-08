@@ -1,4 +1,4 @@
-package com.example.timelineplanner.model
+﻿package com.example.timelineplanner.model
 
 data class PracticeSubject(
     val id: Long = 0,
@@ -14,5 +14,6 @@ data class PracticeRecord(
     val correctQuestions: Int,
     val accuracy: Float,
     val dateMillis: Long,
-    val notes: String = ""
+    val notes: String = "",
+    val createdAtMillis: Long = System.currentTimeMillis()
 )

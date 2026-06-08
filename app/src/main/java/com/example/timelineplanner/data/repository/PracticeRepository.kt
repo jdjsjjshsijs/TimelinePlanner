@@ -87,12 +87,12 @@ class PracticeRepository @Inject constructor(
     private fun PracticeRecordEntity.toDomain() = PracticeRecord(
         id = id, subjectId = subjectId, totalQuestions = totalQuestions,
         correctQuestions = correctQuestions, accuracy = accuracy,
-        dateMillis = dateMillis, notes = notes
+        dateMillis = dateMillis, notes = notes, createdAtMillis = createdAtMillis
     )
 
     private fun PracticeRecord.toEntity() = PracticeRecordEntity(
         id = id, subjectId = subjectId, totalQuestions = totalQuestions,
         correctQuestions = correctQuestions, accuracy = accuracy,
-        dateMillis = dateMillis, notes = notes
+        dateMillis = dateMillis, notes = notes, createdAtMillis = createdAtMillis
     )
 }
